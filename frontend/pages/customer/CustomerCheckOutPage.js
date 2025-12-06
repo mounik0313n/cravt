@@ -61,6 +61,9 @@ const CustomerCheckoutPage = {
                                         </select>
                                     </div>
                                 </div>
+                                <div v-if="!slotsLoading && availableDays.length === 0" class="alert alert-info">
+                                    No slots available for the upcoming days.
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -135,7 +138,7 @@ const CustomerCheckoutPage = {
             deliveryFee: 50.00,
             orderType: 'takeaway',
             scheduleChoice: 'now',
-            slotsLoading: true,
+            slotsLoading: false,
             slotsError: null,
             availableDays: [],
             selectedDate: null,
@@ -167,10 +170,11 @@ const CustomerCheckoutPage = {
         }
     },
     watch: {
-        isScheduling(isScheduling) {
-            if (isScheduling && this.availableDays.length > 0 && !this.selectedDate) {
-                this.selectedDate = this.availableDays[0].date_value;
-            } else if (!isScheduling) {
+        // ✅ FIX: Trigger fetch when isScheduling becomes true
+        isScheduling(newVal) {
+            if (newVal) {
+                this.fetchAvailableSlots();
+            } else {
                 this.selectedDate = null;
                 this.selectedTime = null;
             }
@@ -180,7 +184,10 @@ const CustomerCheckoutPage = {
         }
     },
     mounted() {
-        this.fetchAvailableSlots();
+        // If we load the page and we are already scheduling (e.g. refresh on dine-in), fetch slots
+        if (this.isScheduling) {
+            this.fetchAvailableSlots();
+        }
         this.fetchApplicableCoupons();
     },
     methods: {
@@ -193,14 +200,26 @@ const CustomerCheckoutPage = {
             this.availableDays = [];
         },
         async fetchAvailableSlots() {
-            if (!this.isScheduling || !this.selectedDate) return;
+            // ✅ FIX: Removed the check for selectedDate. We need to fetch slots first!
+            if (!this.isScheduling) return;
+            
             this.slotsLoading = true;
+            this.slotsError = null;
             try {
-                const data = await apiService.get(`/api/restaurants/${this.cartRestaurantId}/available-slots?date=${this.selectedDate}`);
-                this.availableDays = data.days || [];
+                // ✅ FIX: Corrected URL from 'restaurant' (singular) to 'restaurants' (plural)
+                // ✅ FIX: Removed '?date=' parameter because the backend returns all days at once
+                const data = await apiService.get(`/api/restaurants/${this.cartRestaurantId}/available-slots`);
+                
+                // ✅ FIX: Backend returns an array, not { days: [] }
+                this.availableDays = data || [];
+                
+                // ✅ UX: Automatically select the first available date
+                if (this.availableDays.length > 0 && !this.selectedDate) {
+                    this.selectedDate = this.availableDays[0].date_value;
+                }
             } catch (err) {
                 console.error('Failed to fetch slots', err);
-                this.slotsError = 'Failed to load available slots';
+                this.slotsError = 'Failed to load available slots. Please try again.';
             } finally {
                 this.slotsLoading = false;
             }
@@ -259,16 +278,13 @@ const CustomerCheckoutPage = {
         },
         async payWithRazorpay(orderId) {
             try {
-                // Request server to create Razorpay order first (may use mock in dev)
                 this.isPaying = true;
                 const res = await apiService.post('/api/payments/create', { order_id: orderId });
                 const { razorpay_order_id, razorpay_key, amount } = res;
 
-                // Try to load Razorpay script
                 try {
                     await this.loadRazorpayScript();
                     
-                    // Real Razorpay checkout
                     const options = {
                         key: razorpay_key,
                         amount: amount,
@@ -278,7 +294,6 @@ const CustomerCheckoutPage = {
                         order_id: razorpay_order_id,
                         handler: async (response) => {
                             this.isPaying = false;
-                            // Verify payment with server
                             try {
                                 const verify = await apiService.post('/api/payments/verify', {
                                     order_id: orderId,
@@ -287,7 +302,6 @@ const CustomerCheckoutPage = {
                                     razorpay_signature: response.razorpay_signature
                                 });
 
-                                // Success: clear cart and navigate to order detail
                                 this.$store.dispatch('clearCart');
                                 alert('Payment successful!');
                                 this.$router.push({ name: 'OrderDetail', params: { id: orderId } });
@@ -313,10 +327,8 @@ const CustomerCheckoutPage = {
                     rzp.open();
                     
                 } catch (razorpayLoadError) {
-                    // Razorpay SDK not available (development mode)
                     console.log('Razorpay SDK not available, using development mode payment');
                     
-                    // In development, simulate payment with mock data
                     const mockPaymentId = 'pay_dev_' + Math.random().toString(36).substr(2, 9);
                     const mockSignature = 'mock_signature_' + Math.random().toString(36).substr(2, 9);
                     
@@ -329,7 +341,6 @@ const CustomerCheckoutPage = {
                             razorpay_signature: mockSignature
                         });
 
-                        // Success: clear cart and navigate to order detail
                         this.$store.dispatch('clearCart');
                         alert('Payment processed successfully (Development Mode)');
                         this.$router.push({ name: 'OrderDetail', params: { id: orderId } });
@@ -344,7 +355,6 @@ const CustomerCheckoutPage = {
                 this.isPaying = false;
                 console.error('Payment error:', e);
                 alert('Unable to start payment: ' + (e.message || e));
-                // Fallback: redirect to order detail
                 this.$router.push({ name: 'OrderDetail', params: { id: orderId } });
             }
         },
@@ -367,13 +377,9 @@ const CustomerCheckoutPage = {
             };
 
             try {
-                // Create internal order first
                 const data = await apiService.post('/api/orders', payload);
                 const orderId = data.order_id;
-
-                // Start Razorpay payment flow for this order
                 await this.payWithRazorpay(orderId);
-
             } catch (err) {
                 this.error = err.message || "Failed to place order.";
             } finally {
@@ -384,4 +390,3 @@ const CustomerCheckoutPage = {
 };
 
 export default CustomerCheckoutPage;
-
