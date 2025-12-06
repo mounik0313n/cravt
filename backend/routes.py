@@ -730,10 +730,14 @@ def place_order():
             price_at_order=menu_item.price
         ))
 
-    # --- 2. Secure Server-Side Coupon Validation ---
-    final_total = subtotal
+    # --- 2. Secure Server-Side Coupon Validation & Delivery Fee ---
+    
+    # ✅ FIX: Defined Delivery Fee to match Frontend (50.0)
+    DELIVERY_FEE = 50.0 
+    
     discount_amount = 0
     coupon_code = data.get('coupon_code')
+    
     if coupon_code:
         coupon = Coupon.query.filter(
             Coupon.code == coupon_code,
@@ -745,10 +749,14 @@ def place_order():
                 discount_amount = (subtotal * coupon.discount_value) / 100
             else: # Fixed amount
                 discount_amount = coupon.discount_value
-            final_total = max(0, subtotal - discount_amount)
+    
+    # ✅ FIX: Calculate final total including delivery fee
+    # Logic: Subtract discount from subtotal (floor at 0), then add delivery fee.
+    amount_after_discount = max(0, subtotal - discount_amount)
+    final_total = amount_after_discount + DELIVERY_FEE
 
     # --- 3. Handle Scheduled Time ---
-    scheduled_time_obj = None # Use a different variable name to avoid confusion
+    scheduled_time_obj = None 
     if data.get('scheduled_time'):
         try:
             iso_string = data['scheduled_time']
@@ -762,6 +770,7 @@ def place_order():
     # --- 4. Create the Order Object ---
     otp = ''.join(random.choices(string.digits, k=6))
     qr_payload = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
+    
     # Normalize order type and capture table number for dine-in
     raw_order_type = (data.get('order_type') or 'takeaway').lower()
     if raw_order_type in ['dinein', 'dine_in', 'dining']:
@@ -787,10 +796,8 @@ def place_order():
         items=order_items_to_create,
         coupon_code=coupon_code,
         discount_amount=round(discount_amount, 2),
-        # --- 🛠️ THE FIX IS HERE ---
         is_scheduled=bool(scheduled_time_obj),
         scheduled_time=scheduled_time_obj 
-        # --- 🛠️ END OF FIX ---
     )
 
     db.session.add(new_order)
@@ -2367,6 +2374,7 @@ def debug_token():
 #def serve_vue_app(path):
 
  #   return render_template('index.html')
+
 
 
 
