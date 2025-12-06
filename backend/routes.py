@@ -1,5 +1,8 @@
 from flask import current_app as app, jsonify, request, render_template, send_file
-from .extensions import api 
+from .extensions import api, cache
+import razorpay
+import hmac
+import hashlib
 from flask_security import auth_required, roles_required, current_user,verify_password
 from werkzeug.security import check_password_hash
 import io
@@ -759,12 +762,25 @@ def place_order():
     # --- 4. Create the Order Object ---
     otp = ''.join(random.choices(string.digits, k=6))
     qr_payload = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
-    
+    # Normalize order type and capture table number for dine-in
+    raw_order_type = (data.get('order_type') or 'takeaway').lower()
+    if raw_order_type in ['dinein', 'dine_in', 'dining']:
+        order_type = 'dine_in'
+    elif raw_order_type in ['pickup', 'collect']:
+        order_type = 'pickup'
+    else:
+        order_type = 'takeaway'
+
+    table_number = None
+    if order_type == 'dine_in':
+        table_number = data.get('table_number')
+
     new_order = Order(
         user_id=current_user.id,
         restaurant_id=restaurant.id,
         total_amount=round(final_total, 2),
-        order_type=data.get('order_type', 'takeaway'),
+        order_type=order_type,
+        table_number=table_number,
         status='placed',
         otp=otp,
         qr_payload=qr_payload,
@@ -779,8 +795,155 @@ def place_order():
 
     db.session.add(new_order)
     db.session.commit()
-    
+    try:
+        cache.delete_memoized(get_restaurant_details, restaurant.id)
+        cache.delete_memoized(get_featured_restaurants)
+    except Exception:
+        pass
+
     return jsonify({'message': 'Order placed successfully!', 'order_id': new_order.id}), 201
+
+
+# -------------------- Razorpay Payment Endpoints --------------------
+@app.route('/api/payments/create', methods=['POST'])
+@auth_required('token')
+@roles_required('customer')
+def create_razorpay_order():
+    """Create a Razorpay order for a given internal Order ID and return the razorpay_order_id and key for checkout."""
+    data = request.get_json() or {}
+    order_id = data.get('order_id')
+    if not order_id:
+        return jsonify({'message': 'order_id is required'}), 400
+
+    order = Order.query.get_or_404(order_id)
+    # Only allow creating payment for the user who owns the order
+    if order.user_id != current_user.id:
+        return jsonify({'message': 'Unauthorized to create payment for this order'}), 403
+
+    # Get Razorpay credentials
+    key_id = app.config.get('RAZORPAY_KEY_ID')
+    key_secret = app.config.get('RAZORPAY_KEY_SECRET')
+    
+    amount_paisa = int(round(order.total_amount * 100))
+    
+    # Try with Razorpay if credentials exist, otherwise use mock (for development)
+    if key_id and key_secret:
+        try:
+            client = razorpay.Client(auth=(key_id, key_secret))
+            rp_order = client.order.create({
+                'amount': amount_paisa,
+                'currency': 'INR',
+                'receipt': str(order.id),
+                'payment_capture': 1
+            })
+            razorpay_order_id = rp_order.get('id')
+        except Exception as e:
+            print(f"Razorpay error: {e}. Using mock order for development.")
+            # Fallback to mock for development
+            razorpay_order_id = f'order_{order.id}_{int(time.time())}'
+    else:
+        # Development mode: create a mock order
+        razorpay_order_id = f'order_{order.id}_{int(time.time())}'
+    
+    # Save razorpay_order_id to our order
+    order.razorpay_order_id = razorpay_order_id
+    order.payment_amount = order.total_amount
+    db.session.commit()
+
+    return jsonify({
+        'razorpay_order_id': razorpay_order_id,
+        'razorpay_key': key_id or 'test-key',
+        'amount': amount_paisa
+    }), 200
+
+
+@app.route('/api/payments/verify', methods=['POST'])
+@auth_required('token')
+@roles_required('customer')
+def verify_razorpay_payment():
+    """Verify the payment signature returned from Razorpay checkout and mark order paid."""
+    data = request.get_json() or {}
+    razorpay_order_id = data.get('razorpay_order_id')
+    razorpay_payment_id = data.get('razorpay_payment_id')
+    razorpay_signature = data.get('razorpay_signature')
+    order_id = data.get('order_id')
+
+    if not all([razorpay_order_id, razorpay_payment_id, razorpay_signature, order_id]):
+        return jsonify({'message': 'Missing payment verification fields'}), 400
+
+    order = Order.query.get_or_404(order_id)
+    if order.user_id != current_user.id:
+        return jsonify({'message': 'Unauthorized'}), 403
+
+    # For development mode with mock orders, skip signature verification
+    key_secret = app.config.get('RAZORPAY_KEY_SECRET')
+    if razorpay_order_id.startswith('order_'):
+        # This is a mock order, accept it as-is
+        print(f"Development mode: Accepting mock payment for order {order_id}")
+    elif key_secret:
+        # Verify signature: HMAC_SHA256(order_id|payment_id, key_secret)
+        payload = f"{razorpay_order_id}|{razorpay_payment_id}".encode()
+        secret = key_secret.encode()
+        generated_sig = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+
+        if not hmac.compare_digest(generated_sig, razorpay_signature):
+            return jsonify({'message': 'Invalid payment signature'}), 400
+
+    # Mark payment success
+    order.razorpay_payment_id = razorpay_payment_id
+    order.payment_status = 'paid'
+    order.status = 'completed'
+    db.session.commit()
+
+    try:
+        cache.delete_memoized(get_restaurant_details, order.restaurant_id)
+        cache.delete_memoized(get_featured_restaurants)
+    except Exception:
+        pass
+
+    return jsonify({'message': 'Payment verified and order completed.'}), 200
+@app.route('/api/payments/webhook', methods=['POST'])
+def razorpay_webhook():
+    """Handle Razorpay webhooks. Verify signature using RAZORPAY_KEY_SECRET."""
+    payload = request.get_data()
+    signature = request.headers.get('X-Razorpay-Signature')
+    secret = app.config.get('RAZORPAY_KEY_SECRET') or ''
+
+    if not signature:
+        return jsonify({'message': 'Missing signature'}), 400
+
+    computed = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(computed, signature):
+        return jsonify({'message': 'Invalid signature'}), 400
+
+    event = request.get_json()
+    # Example: handle payment.captured
+    try:
+        event_type = event.get('event')
+        if event_type == 'payment.captured':
+            payment = event.get('payload', {}).get('payment', {}).get('entity', {})
+            razorpay_payment_id = payment.get('id')
+            razorpay_order_id = payment.get('order_id')
+            # Find our order by receipt or razorpay_order_id
+            order = None
+            if razorpay_order_id:
+                order = Order.query.filter_by(razorpay_order_id=razorpay_order_id).first()
+            if not order and payment.get('notes'):
+                # fallback if you stored receipt in notes
+                pass
+
+            if order:
+                order.razorpay_payment_id = razorpay_payment_id
+                order.payment_status = 'paid'
+                order.status = 'completed'
+                db.session.commit()
+
+    except Exception as e:
+        print(f"Error processing webhook: {e}")
+
+    return jsonify({'message': 'Webhook processed'}), 200
+
+# -------------------- End Razorpay Endpoints --------------------
 
 
 # In backend/routes.py
@@ -893,6 +1056,7 @@ def manage_favorite(restaurant_id):
 # --- NEW: RESTAURANT LISTING & DETAIL ENDPOINTS ---
 
 @app.route('/api/restaurants/featured', methods=['GET'])
+@cache.cached(timeout=300)
 def get_featured_restaurants():
     try:
         restaurants = Restaurant.query.filter_by(is_verified=True, is_active=True).limit(6).all()
@@ -929,6 +1093,7 @@ def get_featured_restaurants():
 
 
 @app.route('/api/restaurants/<int:restaurant_id>', methods=['GET'])
+@cache.cached(timeout=300)
 def get_restaurant_details(restaurant_id):
     restaurant = Restaurant.query.options(joinedload(Restaurant.categories).joinedload(Category.menu_items)).get_or_404(restaurant_id)
     
@@ -937,7 +1102,7 @@ def get_restaurant_details(restaurant_id):
         func.count(Review.id).label('review_count')
     ).filter(Review.restaurant_id == restaurant.id).first()
 
-    categories_data = [{'id': cat.id, 'name': cat.name, 'menu_items': [{'id': item.id, 'name': item.name, 'description': item.description, 'price': item.price, 'is_available': item.is_available, 'image': item.image_url or f'https://placehold.co/600x400/E65100/FFF?text={item.name.replace(" ", "+")}'} for item in cat.menu_items]} for cat in restaurant.categories]
+    categories_data = [{'id': cat.id, 'name': cat.name, 'menu_items': [{'id': item.id, 'name': item.name, 'description': item.description, 'price': item.price, 'is_available': item.is_available, 'image': item.image_url or f'https://placehold.co/600x400/E65100/FFF?text={item.name.replace(" ", "+")}' } for item in cat.menu_items]} for cat in restaurant.categories]
     
     restaurant_data = {
         'id': restaurant.id, 'name': restaurant.name, 'description': restaurant.description, 'address': restaurant.address, 'city': restaurant.city, 'cuisine': 'Local Favorites', 
@@ -1126,8 +1291,37 @@ def update_order_status(order_id):
         
     order.status = new_status
     db.session.commit()
+    try:
+        cache.delete_memoized(get_restaurant_details, restaurant.id)
+        cache.delete_memoized(get_featured_restaurants)
+    except Exception:
+        pass
     
     return jsonify({"message": f"Order #{order.id} has been updated to '{new_status}'."}), 200
+
+
+@app.route('/api/restaurant/orders/<int:order_id>/pickup', methods=['PATCH'])
+@auth_required('token')
+@roles_required('owner')
+def set_pickup_ready(order_id):
+    """Marks an order as ready for pickup (or unmarks it)."""
+    restaurant = Restaurant.query.filter_by(owner_id=current_user.id).first_or_404()
+    order = Order.query.get_or_404(order_id)
+    if order.restaurant_id != restaurant.id:
+        return jsonify({"message": "Unauthorized to modify this order."}), 403
+
+    data = request.get_json() or {}
+    ready = data.get('pickup_ready', True)
+    order.pickup_ready = bool(ready)
+    if ready:
+        order.status = 'ready'
+    db.session.commit()
+    try:
+        cache.delete_memoized(get_restaurant_details, restaurant.id)
+        cache.delete_memoized(get_featured_restaurants)
+    except Exception:
+        pass
+    return jsonify({"message": f"Order #{order.id} pickup_ready set to {order.pickup_ready}."}), 200
 
 # ✅ START: NEW OTP VERIFICATION ROUTE
 @app.route('/api/restaurant/orders/<int:order_id>/verify', methods=['POST'])
@@ -1227,6 +1421,12 @@ def create_menu_item():
     )
     db.session.add(new_item)
     db.session.commit()
+    # Invalidate caches affected by menu changes
+    try:
+        cache.delete_memoized(get_restaurant_details, restaurant.id)
+        cache.delete_memoized(get_featured_restaurants)
+    except Exception:
+        pass
     return jsonify({"message": "Menu item created successfully."}), 201
 
 @app.route('/api/restaurant/menu-items/<int:item_id>', methods=['PUT', 'DELETE'])
@@ -1247,11 +1447,21 @@ def manage_menu_item(item_id):
         item.image_url = data.get('image', item.image_url)
         item.category_id = data.get('category_id', item.category_id)
         db.session.commit()
+        try:
+            cache.delete_memoized(get_restaurant_details, restaurant.id)
+            cache.delete_memoized(get_featured_restaurants)
+        except Exception:
+            pass
         return jsonify({"message": "Menu item updated successfully."}), 200
 
     if request.method == 'DELETE':
         db.session.delete(item)
         db.session.commit()
+        try:
+            cache.delete_memoized(get_restaurant_details, restaurant.id)
+            cache.delete_memoized(get_featured_restaurants)
+        except Exception:
+            pass
         return jsonify({"message": "Menu item deleted successfully."}), 200
 
 @app.route('/api/restaurant/menu-items/<int:item_id>/availability', methods=['PATCH'])
@@ -1268,6 +1478,11 @@ def toggle_item_availability(item_id):
     if 'is_available' in data:
         item.is_available = data['is_available']
         db.session.commit()
+        try:
+            cache.delete_memoized(get_restaurant_details, restaurant.id)
+            cache.delete_memoized(get_featured_restaurants)
+        except Exception:
+            pass
     
     return jsonify({"message": f"'{item.name}' availability updated."}), 200
 
@@ -1303,6 +1518,11 @@ def manage_restaurant_profile():
         restaurant.gallery = data.get('gallery', restaurant.gallery)
         
         db.session.commit()
+        try:
+            cache.delete_memoized(get_restaurant_details, restaurant.id)
+            cache.delete_memoized(get_featured_restaurants)
+        except Exception:
+            pass
         
         return jsonify({"message": "Restaurant profile updated successfully!"}), 200
     
@@ -1342,6 +1562,11 @@ def manage_restaurant_promotions():
         )
         db.session.add(new_coupon)
         db.session.commit()
+        try:
+            cache.delete_memoized(get_restaurant_details, restaurant.id)
+            cache.delete_memoized(get_featured_restaurants)
+        except Exception:
+            pass
         return jsonify({"message": "Coupon created successfully."}), 201
 
 @app.route('/api/restaurant/promotions/<int:coupon_id>', methods=['PUT', 'DELETE'])
@@ -1363,11 +1588,21 @@ def manage_specific_promotion(coupon_id):
         coupon.discount_value = data.get('value', coupon.discount_value)
         coupon.is_active = data.get('isActive', coupon.is_active)
         db.session.commit()
+        try:
+            cache.delete_memoized(get_restaurant_details, restaurant.id)
+            cache.delete_memoized(get_featured_restaurants)
+        except Exception:
+            pass
         return jsonify({"message": "Coupon updated successfully."}), 200
 
     if request.method == 'DELETE':
         db.session.delete(coupon)
         db.session.commit()
+        try:
+            cache.delete_memoized(get_restaurant_details, restaurant.id)
+            cache.delete_memoized(get_featured_restaurants)
+        except Exception:
+            pass
         return jsonify({"message": "Coupon deleted successfully."}), 200
 
 # --- NEW: ANALYTICS ENDPOINT ---
@@ -1508,6 +1743,11 @@ def admin_create_restaurant():
     )
     db.session.add(new_restaurant)
     db.session.commit()
+    try:
+        cache.delete_memoized(get_featured_restaurants)
+        cache.delete_memoized(get_restaurant_details, new_restaurant.id)
+    except Exception:
+        pass
     return jsonify({"message": "Restaurant created successfully."}), 201
 
 @app.route('/api/admin/restaurants/<int:id>', methods=['PUT'])
@@ -1525,6 +1765,11 @@ def admin_update_restaurant(id):
     restaurant.longitude = data.get('longitude', restaurant.longitude) # <-- ADDED
     
     db.session.commit()
+    try:
+        cache.delete_memoized(get_featured_restaurants)
+        cache.delete_memoized(get_restaurant_details, restaurant.id)
+    except Exception:
+        pass
     return jsonify({"message": "Restaurant updated successfully."}), 200
 
 

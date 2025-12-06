@@ -8,7 +8,7 @@ from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 
 # your extension imports
-from backend.extensions import db, security, api, migrate
+from backend.extensions import db, security, api, migrate, cache
 from backend.config import LocalDevelopmentConfig, ProductionConfig
 from backend.security import user_datastore
 
@@ -43,6 +43,8 @@ def createApp():
     api.init_app(app)
     migrate.init_app(app, db)
     security.init_app(app, user_datastore)
+    # Initialize caching (Redis or SimpleCache depending on config)
+    cache.init_app(app)
 
     # JWT
     JWTManager(app)

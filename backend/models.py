@@ -88,6 +88,8 @@ class Order(db.Model):
     total_amount = db.Column(db.Float, nullable=False)
     status = db.Column(db.String(50), default='placed')
     order_type = db.Column(db.String(50), nullable=False)
+    table_number = db.Column(db.String(20), nullable=True)
+    pickup_ready = db.Column(db.Boolean, default=False)
     otp = db.Column(db.String(6), nullable=True)
     qr_payload = db.Column(db.String(255), nullable=False, unique=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -96,6 +98,11 @@ class Order(db.Model):
     scheduled_time = db.Column(db.DateTime, nullable=True)
     coupon_code = db.Column(db.String(50), nullable=True)
     discount_amount = db.Column(db.Float, default=0.0)
+    # Payment integration fields
+    razorpay_order_id = db.Column(db.String(255), nullable=True)
+    razorpay_payment_id = db.Column(db.String(255), nullable=True)
+    payment_status = db.Column(db.String(50), default='pending')
+    payment_amount = db.Column(db.Float, nullable=True)
     
     review = db.relationship('Review', backref='order', uselist=False, cascade="all, delete-orphan")
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade="all, delete-orphan")
