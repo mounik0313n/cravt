@@ -196,7 +196,7 @@ const CustomerCheckoutPage = {
             if (!this.isScheduling || !this.selectedDate) return;
             this.slotsLoading = true;
             try {
-                const data = await apiService.get(`/api/restaurant/${this.cartRestaurantId}/available-slots?date=${this.selectedDate}`);
+                const data = await apiService.get(`/api/restaurants/${this.cartRestaurantId}/available-slots?date=${this.selectedDate}`);
                 this.availableDays = data.days || [];
             } catch (err) {
                 console.error('Failed to fetch slots', err);
@@ -384,3 +384,4 @@ const CustomerCheckoutPage = {
 };
 
 export default CustomerCheckoutPage;
+
