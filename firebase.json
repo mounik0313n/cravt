@@ -1,0 +1,26 @@
+{
+  "functions": {
+    "source": ".",
+    "codebase": "default",
+    "ignore": [
+      "venv",
+      ".git",
+      "frontend/node_modules",
+      "__pycache__"
+    ]
+  },
+  "hosting": {
+    "public": "frontend",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "function": "api"
+      }
+    ]
+  }
+}
