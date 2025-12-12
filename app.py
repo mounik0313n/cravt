@@ -46,6 +46,13 @@ def createApp():
     # Initialize caching (Redis or SimpleCache depending on config)
     cache.init_app(app)
 
+    # Initialize Firebase Admin (centralized)
+    try:
+        from backend.firebase_admin_init import init_firebase
+        init_firebase(app)
+    except Exception:
+        # Safe to ignore here; the helper logs any issues
+        app.logger.exception('Error while initializing Firebase Admin')
     # JWT
     JWTManager(app)
 

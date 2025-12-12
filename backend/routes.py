@@ -66,36 +66,8 @@ def temp_setup_database():
         return jsonify({"status": "error", "message": error_message}), 500
 # --- END NEW ROUTE ---
 
-# --- Firebase initialization (optional) ---
-try:
-    fa_json = app.config.get('FIREBASE_SERVICE_ACCOUNT_JSON')
-    fa_file = app.config.get('FIREBASE_SERVICE_ACCOUNT_FILE')
-
-    if fa_json:
-        # Service account supplied as JSON string in env
-        sa_info = json.loads(fa_json)
-        cred = firebase_credentials.Certificate(sa_info)
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(cred)
-        app.logger.info('Firebase admin initialized from JSON env')
-
-    elif fa_file:
-        # Service account supplied as a file path
-        if os.path.exists(fa_file):
-            try:
-                cred = firebase_credentials.Certificate(fa_file)
-                if not firebase_admin._apps:
-                    firebase_admin.initialize_app(cred)
-                app.logger.info('Firebase admin initialized from file: %s', fa_file)
-            except Exception as e:
-                app.logger.exception('Failed to initialize Firebase from file')
-        else:
-            app.logger.warning('FIREBASE_SERVICE_ACCOUNT_FILE set but file does not exist: %s', fa_file)
-
-    else:
-        app.logger.info('Firebase service account not provided; Firebase admin not initialized')
-except Exception as _e:
-    app.logger.warning(f'Firebase init failed: {_e}')
+# Firebase Admin initialization is now handled centrally in `backend/firebase_admin_init.py`.
+# The app factory (`createApp` in app.py) calls the initializer during startup.
 
 @app.route('/api/login', methods=['POST'])
 def login():
