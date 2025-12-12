@@ -1,6 +1,8 @@
 from flask import current_app as app, jsonify, request, render_template, send_file
 from .extensions import api, cache
 import razorpay
+import firebase_admin
+from firebase_admin import auth as firebase_auth, credentials as firebase_credentials
 import hmac
 import hashlib
 from flask_security import auth_required, roles_required, current_user,verify_password
@@ -25,6 +27,7 @@ from datetime import datetime, date,timedelta
 from sqlalchemy.orm import joinedload
 import random
 import string
+import json
 
 # --- ============================= ---
 # --- CORE AUTHENTICATION API ROUTES ---
@@ -62,6 +65,37 @@ def temp_setup_database():
         print(f"--- [TEMP SETUP] ERROR: {error_message} ---", file=sys.stderr)
         return jsonify({"status": "error", "message": error_message}), 500
 # --- END NEW ROUTE ---
+
+# --- Firebase initialization (optional) ---
+try:
+    fa_json = app.config.get('FIREBASE_SERVICE_ACCOUNT_JSON')
+    fa_file = app.config.get('FIREBASE_SERVICE_ACCOUNT_FILE')
+
+    if fa_json:
+        # Service account supplied as JSON string in env
+        sa_info = json.loads(fa_json)
+        cred = firebase_credentials.Certificate(sa_info)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+        app.logger.info('Firebase admin initialized from JSON env')
+
+    elif fa_file:
+        # Service account supplied as a file path
+        if os.path.exists(fa_file):
+            try:
+                cred = firebase_credentials.Certificate(fa_file)
+                if not firebase_admin._apps:
+                    firebase_admin.initialize_app(cred)
+                app.logger.info('Firebase admin initialized from file: %s', fa_file)
+            except Exception as e:
+                app.logger.exception('Failed to initialize Firebase from file')
+        else:
+            app.logger.warning('FIREBASE_SERVICE_ACCOUNT_FILE set but file does not exist: %s', fa_file)
+
+    else:
+        app.logger.info('Firebase service account not provided; Firebase admin not initialized')
+except Exception as _e:
+    app.logger.warning(f'Firebase init failed: {_e}')
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -104,14 +138,116 @@ def register_customer():
         return jsonify({"message": "User already exists"}), 409
     
     # 👇 HASH THE PASSWORD ON REGISTRATION 👇
-    user_datastore.create_user(
+    pw = data.get('password')
+    user = user_datastore.create_user(
         email=email,
-        password=(data.get('password')), # Use the imported hash_password
+        password=pw, # Flask-Security will hash
         name=data.get('name'),
         roles=['customer']
     )
     db.session.commit()
+
+    # If Firebase Admin is initialized, also create a Firebase user so email/password works
+    try:
+        if firebase_admin._apps:
+            try:
+                fb_user = firebase_auth.create_user(email=email, password=pw)
+                user.firebase_uid = fb_user.uid
+                db.session.add(user)
+                db.session.commit()
+                app.logger.info('Created Firebase user for %s', email)
+            except Exception as e:
+                # Non-fatal: log but continue. Common reasons: email already exists in Firebase
+                app.logger.warning('Failed to create Firebase user: %s', e)
+    except Exception:
+        # If firebase_admin not present or other issue, ignore
+        pass
+
     return jsonify({"message": "Customer account created successfully"}), 201
+
+
+@app.route('/api/auth/firebase', methods=['POST'])
+def firebase_auth_exchange():
+    """Accepts a Firebase ID token from the client, verifies it with
+    Firebase Admin SDK, maps or creates a local user, and returns the
+    application's auth token and user info.
+    """
+    data = request.get_json() or {}
+    id_token = data.get('idToken')
+    if not id_token:
+        return jsonify({"message": "idToken is required"}), 400
+
+    # Ensure firebase admin initialized
+    if not firebase_admin._apps:
+        app.logger.warning('Firebase admin not initialized when verifying token')
+        return jsonify({"message": "Firebase not configured on server"}), 500
+
+    try:
+        decoded = firebase_auth.verify_id_token(id_token)
+        email = decoded.get('email')
+        name = decoded.get('name') or decoded.get('displayName') or email.split('@')[0]
+
+        if not email:
+            return jsonify({"message": "Firebase token does not contain an email"}), 400
+
+        firebase_uid = decoded.get('uid') or decoded.get('user_id')
+        photo = decoded.get('picture') or decoded.get('photoUrl')
+
+        user = user_datastore.find_user(email=email)
+        if not user:
+            # Create a local user mapped to this Firebase identity
+            random_pw = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
+            user = user_datastore.create_user(
+                email=email,
+                password=random_pw,
+                name=name,
+                roles=['customer']
+            )
+            # set firebase_uid and photo if available
+            if firebase_uid:
+                user.firebase_uid = firebase_uid
+            if photo:
+                user.photo_url = photo
+            db.session.commit()
+        else:
+            # Update existing user record with Firebase details if missing or changed
+            updated = False
+            if firebase_uid and getattr(user, 'firebase_uid', None) != firebase_uid:
+                user.firebase_uid = firebase_uid
+                updated = True
+            if photo and getattr(user, 'photo_url', None) != photo:
+                user.photo_url = photo
+                updated = True
+            if updated:
+                db.session.add(user)
+                db.session.commit()
+
+        # Return the same shape as the regular login endpoint
+        return jsonify({
+            "message": "Login Successful",
+            "token": user.get_auth_token(),
+            "user": {"id": user.id, "email": user.email, "name": user.name, "roles": [r.name for r in user.roles], "photo_url": getattr(user, 'photo_url', None)}
+        }), 200
+
+    except Exception as e:
+        app.logger.exception('Firebase token verification failed')
+        return jsonify({"message": "Invalid Firebase token"}), 401
+
+
+@app.route('/api/config/firebase', methods=['GET'])
+def get_firebase_config():
+    """Return Firebase frontend config stored in server config (JSON string).
+    This allows the frontend to initialize the Firebase SDK without bundling secrets.
+    """
+    cfg = app.config.get('FIREBASE_FRONTEND_CONFIG_JSON')
+    if not cfg:
+        return jsonify({}), 404
+    try:
+        parsed = json.loads(cfg)
+        return jsonify(parsed), 200
+    except Exception as e:
+        app.logger.exception('Failed to parse FIREBASE_FRONTEND_CONFIG_JSON')
+        return jsonify({}), 500
 
 # --- ========================= ---
 # --- RESTAURANT OWNER API ROUTES ---

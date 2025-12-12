@@ -24,6 +24,9 @@ class User(db.Model, UserMixin):
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(255))
+    # Firebase-specific fields
+    firebase_uid = db.Column(db.String(255), unique=True, nullable=True)
+    photo_url = db.Column(db.String(1024), nullable=True)
     active = db.Column(db.Boolean())
     fs_uniquifier = db.Column(db.String(64), unique=True, nullable=False)
     roles = db.relationship('Role', secondary='roles_users', backref=db.backref('users', lazy='dynamic'))

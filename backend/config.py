@@ -41,6 +41,14 @@ class Config:
     RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID')
     RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET')
 
+    # Firebase configuration (service account JSON can be set as a JSON string in env for local/dev)
+    # Example: FIREBASE_SERVICE_ACCOUNT_JSON='{ "type": "service_account", ... }'
+    FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
+    # Optionally, provide a path to a service account JSON file on disk
+    FIREBASE_SERVICE_ACCOUNT_FILE = os.environ.get('FIREBASE_SERVICE_ACCOUNT_FILE')
+    # Frontend Firebase config (for firebase.initializeApp in the browser)
+    FIREBASE_FRONTEND_CONFIG_JSON = os.environ.get('FIREBASE_FRONTEND_CONFIG_JSON')
+
 
 class ProductionConfig(Config):
     """Production configuration (used by Render)."""

@@ -116,6 +116,30 @@ const store = new Vuex.Store({
             commit('CLEAR_CART'); // Clear cart on logout
         },
 
+        // Set auth token/user when logging in via external providers (Firebase)
+        loginWithToken({ commit }, { token, user }) {
+            commit('SET_TOKEN', token);
+            commit('SET_USER', user);
+        },
+        
+        // Exchange a Firebase ID token with the backend for an app token
+        async exchangeFirebaseIdToken({ commit }, idToken) {
+            const response = await fetch('/api/auth/firebase', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idToken }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || 'Firebase token exchange failed.');
+            }
+
+            commit('SET_TOKEN', data.token);
+            commit('SET_USER', data.user);
+            return data;
+        },
+
         // --- 🛠️ START: CART ACTIONS ---
         addItemToCart({ commit }, { item, restaurantId }) {
             commit('ADD_ITEM_TO_CART', { item, restaurantId });
