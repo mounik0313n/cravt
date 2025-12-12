@@ -1,66 +1,79 @@
 # Foodle Deployment Guide
 
+**Project ID:** `crav-3b509`
+
 This guide covers deploying the Foodle application (Flask backend + Vue.js frontend) with Firebase authentication to production.
 
 ## Overview
 
 - **Frontend**: Vue.js SPA hosted on Firebase Hosting
 - **Backend**: Flask app hosted on Render, Fly.io, or similar
-- **Auth**: Google Firebase (OAuth2 sign-in/sign-up)
+- **Auth**: Google Firebase OAuth2 (sign-in/sign-up)
 - **Database**: PostgreSQL (production-grade)
 - **Payments**: Razorpay (integrated)
+- **Firebase Project**: `crav-3b509`
 
 ---
 
 ## Part 1: Firebase Project Setup
 
-### 1.1 Create or Select Firebase Project
+### 1.1 Your Firebase Project Details
 
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Create a new project or select an existing one
-3. Note your **Project ID** (lowercase, e.g., `foodle-app-123`)
+```
+Project name: crav
+Project ID: crav-3b509
+Project number: 687400550130
+Public-facing name: project-687400550130
+```
 
-### 1.2 Enable Authentication
+✅ **Already created** — No need to create a new project.
 
-1. In Firebase Console → **Authentication** → **Sign-in method**
-2. Enable **Google** sign-in provider
-3. Go to **Authorized domains** and add your hosting domains:
-   - `localhost` (for local testing)
+### 1.2 Enable Authentication (If Not Already Done)
+
+1. Go to [Firebase Console](https://console.firebase.google.com/project/crav-3b509)
+2. Navigate to **Authentication** → **Sign-in method**
+3. Ensure **Google** is enabled
+4. Go to **Authorized domains** and add:
+   - `localhost` (local testing on `127.0.0.1:10000`)
    - Your production domain (e.g., `foodle.example.com`)
-   - Firebase automatically adds your Firebase Hosting domain
+   - Firebase Hosting domain: `crav-3b509.web.app`
 
 ### 1.3 Get Firebase Credentials
 
-#### For Frontend (Required for all environments)
-1. Go to **Project Settings** → **Your apps** → Create a Web app (if not exists)
-2. Copy the config JSON (contains `apiKey`, `authDomain`, `projectId`, `appId`, etc.)
-3. Set as env var:
-   ```powershell
-   $env:FIREBASE_FRONTEND_CONFIG_JSON = '{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'
-   ```
+#### For Frontend (Required)
+1. Go to **Project Settings** (⚙️ icon top-left) → **Your apps**
+2. Select or create a **Web** app
+3. Copy the config object (contains `apiKey`, `authDomain`, `projectId`, `appId`, etc.)
+
+**Example config:**
+```json
+{
+  "apiKey": "AIzaSyAzaeAJY6yKW4ujOFktp26q-zdt6Wo5hLM",
+  "authDomain": "crav-3b509.firebaseapp.com",
+  "projectId": "crav-3b509",
+  "storageBucket": "crav-3b509.appspot.com",
+  "messagingSenderId": "687400550130",
+  "appId": "YOUR_APP_ID"
+}
+```
+
+**Set as env var** (single-line JSON):
+```powershell
+$env:FIREBASE_FRONTEND_CONFIG_JSON = '{"apiKey":"AIzaSyAzaeAJY6yKW4ujOFktp26q-zdt6Wo5hLM","authDomain":"crav-3b509.firebaseapp.com","projectId":"crav-3b509","storageBucket":"crav-3b509.appspot.com","messagingSenderId":"687400550130","appId":"YOUR_APP_ID"}'
+```
 
 #### For Backend (Required for token verification)
-1. Go to **Project Settings** → **Service Accounts**
-2. Click **Generate New Private Key** → JSON file downloads
-3. Store this file securely (e.g., `serviceAccount.json` in project root)
-4. Set env var on your server:
-   ```bash
-   export FIREBASE_SERVICE_ACCOUNT_FILE=/path/to/serviceAccount.json
-   ```
+1. Go to **Project Settings** → **Service Accounts** tab
+2. Click **Generate New Private Key** → downloads `crav-3b509-firebase-adminsdk-XXXXX.json`
+3. Store securely (keep out of version control)
 
 ---
 
 ## Part 2: Backend Deployment (Flask)
 
-### 2.1 Prerequisites
+### 2.1 Database Migration (Local First)
 
-- Python 3.8+
-- PostgreSQL database (create a new database for production)
-- Hosting provider account (Render, Fly.io, Heroku, etc.)
-
-### 2.2 Database Migration
-
-Before deploying, run migrations locally to ensure they work:
+Before deploying, test migrations locally:
 
 ```powershell
 $env:FLASK_APP = 'app.py'
@@ -68,58 +81,59 @@ python -m flask db migrate -m "Add firebase fields"
 python -m flask db upgrade
 ```
 
-Commit the migration file to git:
+Commit the migration:
 ```powershell
 git add migrations/
-git commit -m "Add Firebase user fields"
+git commit -m "Add Firebase user fields to database"
+git push origin main
 ```
 
-### 2.3 Environment Variables for Production
+### 2.2 Production Environment Variables
 
-Set these on your hosting provider (Render, Fly.io settings):
+Set these on your hosting provider (Render, Fly.io, etc.):
 
-```
+```bash
 # Core Flask
 FLASK_ENV=production
-SECRET_KEY=<generate-a-random-secret-key>
-SECURITY_PASSWORD_SALT=<generate-a-random-salt>
-JWT_SECRET_KEY=<generate-a-random-jwt-key>
+SECRET_KEY=<generate-random: openssl rand -base64 32>
+SECURITY_PASSWORD_SALT=<generate-random>
+JWT_SECRET_KEY=<generate-random>
 
 # Database
 DATABASE_URL=postgresql://user:password@host:5432/foodle_prod
 
 # Firebase
-FIREBASE_SERVICE_ACCOUNT_FILE=/path/to/serviceAccount.json
-FIREBASE_FRONTEND_CONFIG_JSON={"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}
+FIREBASE_FRONTEND_CONFIG_JSON={"apiKey":"...","authDomain":"crav-3b509.firebaseapp.com","projectId":"crav-3b509",...}
+FIREBASE_SERVICE_ACCOUNT_FILE=/path/to/crav-3b509-firebase-adminsdk-XXXXX.json
 
-# Razorpay (if using payments)
-RAZORPAY_KEY_ID=<your-razorpay-key-id>
-RAZORPAY_KEY_SECRET=<your-razorpay-key-secret>
+# Razorpay
+RAZORPAY_KEY_ID=<your-key-id>
+RAZORPAY_KEY_SECRET=<your-key-secret>
 
 # CORS
-FRONTEND_ORIGIN=https://your-frontend-domain.com
+FRONTEND_ORIGIN=https://crav-3b509.web.app
 
-# Caching (optional)
+# Optional: Caching
 REDIS_URL=redis://your-redis-url:6379
 ```
 
-### 2.4 Deploy Backend (Example: Render)
+### 2.3 Deploy Backend (Example: Render.com)
 
 1. Push code to GitHub
 2. Go to [Render.com](https://render.com/) → Create New → Web Service
-3. Connect GitHub repo
-4. Set:
+3. Connect your GitHub repo
+4. Configure:
    - **Build Command**: `pip install -r requirements.txt && python -m flask db upgrade`
    - **Start Command**: `gunicorn app:app`
-   - **Environment**: Add all env vars above
-5. Click Deploy
+   - **Environment Variables**: Add all from section 2.2
+5. Click **Deploy**
 
-### 2.5 Run Initial Database Setup (Post-Deploy)
+### 2.4 Post-Deploy Setup
 
-After first deployment, run the setup endpoint once:
+After first deployment, initialize the database (run once):
 
 ```bash
-curl https://your-backend-url.render.com/api/admin/run-db-setup
+curl https://your-backend-url/api/admin/run-db-setup
 ```
 
 This creates default roles and admin user.
@@ -128,164 +142,151 @@ This creates default roles and admin user.
 
 ## Part 3: Frontend Deployment (Firebase Hosting)
 
-### 3.1 Link Firebase Project Locally
+### 3.1 Local Firebase Configuration
 
-From the project root (`d:\cm`):
-
-```powershell
-firebase use --add
-# Select your project ID from the list
-# This updates .firebaserc with your project
-```
-
-Or manually edit `.firebaserc`:
+Update `.firebaserc` (already configured):
 
 ```json
 {
   "projects": {
-    "default": "your-project-id"
+    "default": "crav-3b509"
   }
 }
 ```
 
-### 3.2 Upload Service Account File (One-time)
+✅ **Already configured** — No changes needed.
 
-If you want the backend to read the service account from a file:
-
-1. Upload `serviceAccount.json` to your backend server/host
-2. Set `FIREBASE_SERVICE_ACCOUNT_FILE=/path/to/serviceAccount.json`
-
-Or use the JSON env var approach (simpler, not storing files):
-
-```powershell
-# Read the file content and set as env var
-$content = Get-Content -Path serviceAccount.json -Raw
-$env:FIREBASE_SERVICE_ACCOUNT_FILE = $content
-```
-
-### 3.3 Deploy Frontend to Firebase Hosting
+### 3.2 Deploy Frontend
 
 ```powershell
 cd D:\cm\frontend
 firebase deploy --only hosting
 ```
 
-**Output example:**
+**Expected output:**
 ```
 ✔ Deploy complete!
 
-Project Console: https://console.firebase.google.com/project/your-project-id
-Hosting URL: https://your-project-id.web.app
+Project Console: https://console.firebase.google.com/project/crav-3b509
+Hosting URL: https://crav-3b509.web.app
 ```
 
-### 3.4 Verify Deployment
+### 3.3 Verify Deployment
 
-Visit `https://your-project-id.web.app`:
-1. Click "Sign Up"
-2. Click "Sign up with Google"
-3. Complete Google sign-in flow
-4. Should redirect to home page after successful auth
+Visit `https://crav-3b509.web.app`:
+1. Should load the Foodle homepage
+2. Click "Sign Up" → "Sign up with Google"
+3. Complete Google OAuth flow
+4. Should create account and redirect to home
 
 ---
 
-## Part 4: Post-Deployment Checklist
+## Part 4: Testing Checklist
 
-- [ ] Firebase Hosting URL is live and loads the app
-- [ ] Backend API is accessible and health check passes: `curl https://backend-url/health`
-- [ ] Google sign-in works on login/signup pages
-- [ ] Backend logs show "Firebase admin initialized from file..." or similar
-- [ ] Users can create accounts via Google sign-in
-- [ ] Database is populated and orders can be placed
-- [ ] Razorpay payments work (if enabled)
-- [ ] CORS is configured correctly (no cross-origin errors in browser console)
+- [ ] Backend is live: `curl https://your-backend-url/health` returns `{"status": "healthy"}`
+- [ ] Firebase config endpoint works: `curl https://your-backend-url/api/config/firebase` returns JSON
+- [ ] Frontend loads at `https://crav-3b509.web.app`
+- [ ] Google sign-in popup appears on login page
+- [ ] Can create account via Google OAuth
+- [ ] Orders can be placed
+- [ ] Razorpay integration works (if enabled)
+- [ ] No CORS errors in browser console
 
 ---
 
-## Part 5: Monitoring & Troubleshooting
+## Part 5: Troubleshooting
 
-### Common Issues
+### "Firebase not configured on server"
+**Cause**: Backend can't read `FIREBASE_FRONTEND_CONFIG_JSON`  
+**Fix**: Verify env var is set correctly on your hosting provider
 
-**"Firebase not configured on server"**
-- Check: Backend `GET /api/config/firebase` returns valid JSON
-- Fix: Ensure `FIREBASE_FRONTEND_CONFIG_JSON` is set on backend
+### "Unauthorized domain" (Google sign-in fails)
+**Cause**: App domain not in Firebase Authorized domains  
+**Fix**: Add domain to Firebase → Authentication → Authorized domains
 
-**Google Sign-In Popup Blocked**
-- Fix: Add domain to Firebase Authorized Domains (Part 1.2 step 3)
-- Test: Open DevTools → Console to see error message
+### Google Sign-In Popup Blocked
+**Cause**: Browser popup blocker  
+**Fix**: Allow popups for your domain; check browser console for errors
 
-**"Unauthorized domain" error**
-- Fix: Same as above — add domain to Firebase Authorized Domains
+### Database Migration Failed
+**Cause**: Connection issues or missing migrations  
+**Fix**: Run `python -m flask db upgrade` manually on server
 
-**Database Migrations Failed**
-- Fix: Run `python -m flask db upgrade` manually on the server
-- Check: Database URL is correct and accessible
-
-**CORS Errors in Browser**
-- Fix: Ensure `FRONTEND_ORIGIN` env var is set correctly on backend
-- Example: `FRONTEND_ORIGIN=https://your-project-id.web.app`
-
-### Useful Commands
-
-```powershell
-# Check Firebase deployment status
-firebase hosting:channel:list
-
-# View Firebase Hosting logs
-firebase hosting:log
-
-# View backend app logs (Render example)
-curl https://api.render.com/v1/services/{service-id}/logs --header "authorization: Bearer YOUR_API_TOKEN"
-
-# SSH into backend server (Fly.io example)
-fly ssh console
-```
+### Service Account File Not Found
+**Cause**: `FIREBASE_SERVICE_ACCOUNT_FILE` path incorrect  
+**Fix**: Upload file to server and set correct absolute path, or use `FIREBASE_SERVICE_ACCOUNT_JSON` env var instead
 
 ---
 
 ## Part 6: Updating the App
 
-### Deploy Backend Changes
-
+### Backend Changes
 ```powershell
 git add -A
 git commit -m "Your changes"
 git push origin main
 # Render auto-deploys on push
 
-# If migrations added:
-# - Run locally to test
+# If database changes added:
+# - Test locally first: python -m flask db migrate
 # - Commit migration file
-# - Backend will auto-run migrations on deploy
+# - Backend runs migrations automatically on deploy
 ```
 
-### Deploy Frontend Changes
-
+### Frontend Changes
 ```powershell
 git add -A
 git commit -m "Your changes"
 git push origin main
 
-cd frontend
+cd D:\cm\frontend
 firebase deploy --only hosting
 ```
 
 ---
 
-## Part 7: Securing Production
+## Part 7: Monitoring
 
-1. **Change Admin Credentials** (if used default from DB setup)
-2. **Enable HTTPS** (automatic on Firebase Hosting and Render)
-3. **Set Strong Secrets** in all env vars
-4. **Enable Database Backups** (configure on your host)
-5. **Monitor Logs** for errors and suspicious activity
-6. **Set up Alerts** for uptime and errors
+### Useful Links
+- **Firebase Console**: https://console.firebase.google.com/project/crav-3b509
+- **Firebase Hosting**: https://console.firebase.google.com/project/crav-3b509/hosting
+- **Backend Logs**: Check your Render/Fly.io dashboard
+- **Database**: Connect using your PostgreSQL client
+
+### Health Checks
+```bash
+# Backend health
+curl https://your-backend-url/health
+
+# Firebase config (should return JSON)
+curl https://your-backend-url/api/config/firebase
+
+# Firebase hosting
+curl https://crav-3b509.web.app
+```
 
 ---
 
-## Questions?
+## Quick Reference
 
-Refer to:
-- [Firebase Console](https://console.firebase.google.com/)
-- [Render Docs](https://render.com/docs)
-- [Firebase Hosting Docs](https://firebase.google.com/docs/hosting)
+| Item | Value |
+|------|-------|
+| Firebase Project ID | `crav-3b509` |
+| Firebase Hosting URL | `https://crav-3b509.web.app` |
+| Firebase Console | https://console.firebase.google.com/project/crav-3b509 |
+| Auth Provider | Google OAuth2 |
+| Database | PostgreSQL |
+| Payment Gateway | Razorpay |
+| Backend Tech | Flask + Gunicorn |
+| Frontend Tech | Vue.js + Firebase Hosting |
+
+---
+
+## Support
+
+Refer to official documentation:
+- [Firebase Docs](https://firebase.google.com/docs)
+- [Firebase Hosting](https://firebase.google.com/docs/hosting)
 - [Flask Deployment](https://flask.palletsprojects.com/deployment/)
+- [Render Docs](https://render.com/docs)
+
