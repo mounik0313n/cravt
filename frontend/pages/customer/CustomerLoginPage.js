@@ -41,7 +41,14 @@ const CustomerLoginPage = {
             try {
                 const res = await fetch('/api/config/firebase');
                 if (!res.ok) return; // no firebase configured
-                const cfg = await res.json();
+                const contentType = res.headers.get('content-type') || '';
+                let cfg = null;
+                if (contentType.includes('application/json')) {
+                    cfg = await res.json();
+                } else {
+                    console.warn('Firebase config endpoint returned non-JSON content-type:', contentType);
+                    return; // graceful failure; app-level fallback may provide config
+                }
 
                 // Load Firebase compat SDKs dynamically
                 await this.loadScript('https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js');

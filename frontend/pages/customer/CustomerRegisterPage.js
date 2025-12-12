@@ -41,7 +41,16 @@ const CustomerRegisterPage = {
             try {
                 const res = await fetch('/api/config/firebase');
                 if (!res.ok) return;
-                const cfg = await res.json();
+                const contentType = res.headers.get('content-type') || '';
+                let cfg = null;
+                if (contentType.includes('application/json')) {
+                    // Safe to parse as JSON
+                    cfg = await res.json();
+                } else {
+                    // Non-JSON response (HTML or plain text) - likely a 200 HTML page from hosting
+                    console.warn('Firebase config endpoint returned non-JSON content-type:', contentType);
+                    return; // fail gracefully; frontend app.js may have inline config
+                }
 
                 await this.loadScript('https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js');
                 await this.loadScript('https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js');
