@@ -25,6 +25,11 @@ async function apiFetch(url, options = {}) {
         headers['Authentication-Token'] = token;
     }
 
+    // Define the backend URL based on environment
+    // When hosted on Render (same origin), we use relative paths.
+    // Localhost needs full URL if on different port, but here we assume same origin or proxy.
+    const BACKEND_URL = '';
+
     // Build the full request options
     const config = {
         ...options,
