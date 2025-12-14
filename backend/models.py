@@ -46,18 +46,26 @@ class Restaurant(db.Model):
     # --- ✅ START: GEOLOCATION FIELDS ADDED ---
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
-    # --- ✅ END: GEOLOCATION FIELDS ADDED ---
     # --- ✅ START: ADDED RESTAURANT OPERATIONAL FIELD ---
     opening_hours = db.Column(db.String(255), nullable=True) # e.g. "9:00 AM - 10:00 PM"
     # --- ✅ END: ADDED RESTAURANT OPERATIONAL FIELD ---
 
     is_verified = db.Column(db.Boolean, default=False)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    
+    # --- Fee Configuration (Controlled by Business Owner) ---
+    delivery_fee = db.Column(db.Float, default=50.0)
+    takeaway_fee = db.Column(db.Float, default=20.0)
+    dine_in_fee = db.Column(db.Float, default=10.0)
+    platform_fee = db.Column(db.Float, default=7.0)
+    
     is_active = db.Column(db.Boolean, default=True)
     gallery = db.Column(db.JSON, nullable=True)
 
 
 
-    owner = db.relationship('User', backref='restaurants_owned')
+    owner = db.relationship('User', backref=db.backref('restaurants', lazy=True))
     menu_items = db.relationship('MenuItem', backref='restaurant', lazy=True, cascade="all, delete-orphan")
     categories = db.relationship('Category', backref='restaurant', lazy=True, cascade="all, delete-orphan")
     orders = db.relationship('Order', backref='restaurant', lazy=True)
@@ -99,8 +107,11 @@ class Order(db.Model):
     is_scheduled = db.Column(db.Boolean, default=False)
 
     scheduled_time = db.Column(db.DateTime, nullable=True)
-    coupon_code = db.Column(db.String(50), nullable=True)
+    coupon_id = db.Column(db.Integer, db.ForeignKey('coupon.id'), nullable=True)
     discount_amount = db.Column(db.Float, default=0.0)
+    
+    # New Field
+    delivery_address = db.Column(db.String(500), nullable=True)
     # Payment integration fields
     razorpay_order_id = db.Column(db.String(255), nullable=True)
     razorpay_payment_id = db.Column(db.String(255), nullable=True)

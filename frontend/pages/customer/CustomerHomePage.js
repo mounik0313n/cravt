@@ -6,14 +6,17 @@ const CustomerHomePage = {
     },
     template: `
         <div>
-            <!-- HERO SECTION (Unchanged) -->
+            <!-- HERO SECTION (Updated for Dine-In/Takeaway) -->
             <section class="hero-section">
                 <div class="container">
                     <div class="row align-items-center">
                         <div class="col-lg-6 text-center text-lg-left">
-                            <h1 class="hero-title">All Fast Food is Available at <span class="text-brand">Foodle</span></h1>
-                            <p class="my-4">We Are Just A Click Away When You Crave For Delicious Fast Food</p>
-                            <button class="btn btn-brand btn-lg" @click="scrollToFeatured">Order Now</button>
+                            <h1 class="hero-title">Experience the Best <span class="text-brand">Dine-In & Takeaway</span></h1>
+                            <p class="my-4 lead">Skip the line. Book your table or order ahead for seamless pickup.</p>
+                            <div class="d-flex justify-content-center justify-content-lg-start">
+                                <button class="btn btn-brand btn-lg mr-3" @click="scrollToFeatured">Book a Table</button> 
+                                <button class="btn btn-outline-brand btn-lg" @click="scrollToFeatured">Order Pickup</button>
+                            </div>
                         </div>
                         <div class="col-lg-6 mt-5 mt-lg-0">
                             <img src="/assets/images/hero.jpg" class="img-fluid" alt="Delicious food on a plate">
@@ -26,8 +29,8 @@ const CustomerHomePage = {
             <!-- ✅ START: MODIFIED RESTAURANTS SECTION -->
             <section class="restaurants-section text-center" id="nearby-restaurants">
                 <div class="container">
-                    <h2>Restaurants <span class="text-brand">Near You</span></h2>
-                    <p>Delicious food from local restaurants, right at your fingertips.</p>
+                    <h2 class="mb-3">Explore <span class="text-brand">Restaurants</span></h2>
+                    <p class="mb-5 text-muted">Find the perfect spot for your next meal.</p>
                     
                     <!-- GEOLOCATION STATUS MESSAGES -->
                     <div v-if="isLocating" class="alert alert-info mt-5">
@@ -55,8 +58,8 @@ const CustomerHomePage = {
             <!-- REGULAR MENU & FOOTER (Unchanged) -->
              <section class="menu-section text-center bg-light">
                  <div class="container">
-                     <h2>Our Regular <span class="text-brand">Menu</span></h2>
-                     <p>These Are Our Regular Menus, You Can Order Anything You Like.</p>
+                     <h2>Our Regular <span class="text-brand">Selection</span></h2>
+                     <p>Quick bites for when you're on the go.</p>
                      <div v-if="menuLoading" class="mt-5">Loading menu...</div>
                      <div v-if="menuError" class="alert alert-danger mt-5">{{ menuError }}</div>
                      <div v-if="!menuLoading && !menuError" class="row mt-5">
@@ -80,11 +83,11 @@ const CustomerHomePage = {
     `,
     data() {
         return {
-            loading: true, 
-            error: null, 
+            loading: true,
+            error: null,
             restaurants: [],
-            menuLoading: true, 
-            menuError: null, 
+            menuLoading: true,
+            menuError: null,
             menu: [],
             // --- ✅ START: GEOLOCATION STATE ---
             isLocating: true,
@@ -117,11 +120,11 @@ const CustomerHomePage = {
                         const response = await fetch(`/api/restaurants/nearby?lat=${latitude}&lng=${longitude}`);
                         const data = await response.json();
                         if (!response.ok) throw new Error("Could not fetch nearby restaurants.");
-                        
+
                         this.restaurants = data;
                         if (data.length === 0) {
                             // If no nearby are found, fetch featured as a fallback
-                           this.fetchFeaturedRestaurants();
+                            this.fetchFeaturedRestaurants();
                         }
                     } catch (err) {
                         this.locationError = err.message;
@@ -133,7 +136,7 @@ const CustomerHomePage = {
                 },
                 (error) => {
                     this.isLocating = false;
-                    switch(error.code) {
+                    switch (error.code) {
                         case error.PERMISSION_DENIED:
                             this.locationError = "You denied the request for Geolocation.";
                             break;
@@ -155,14 +158,14 @@ const CustomerHomePage = {
 
         // Renamed from fetchRestaurants to fetchFeaturedRestaurants to be more specific
         async fetchFeaturedRestaurants() {
-            this.loading = true; 
+            this.loading = true;
             this.error = null;
             try {
                 const response = await fetch('/api/restaurants/featured');
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.message || "Failed to load restaurants.");
                 // If restaurants are already populated by nearby search, don't overwrite
-                if(this.restaurants.length === 0) {
+                if (this.restaurants.length === 0) {
                     this.restaurants = data;
                 }
             } catch (err) { this.error = err.message; } finally { this.loading = false; }
@@ -183,8 +186,8 @@ const CustomerHomePage = {
                 this.$router.push('/login');
                 return;
             }
-            this.$store.dispatch('addItemToCart', { 
-                item: item, 
+            this.$store.dispatch('addItemToCart', {
+                item: item,
                 restaurantId: item.restaurantId
             });
             alert(`${item.name} has been added to your cart!`);

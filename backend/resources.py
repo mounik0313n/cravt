@@ -40,7 +40,12 @@ restaurant_detail_fields = {
     'address': fields.String,
     'city': fields.String,
     'owner': fields.Nested(user_fields),
-    'categories': fields.List(fields.Nested(category_fields))
+    'categories': fields.List(fields.Nested(category_fields)),
+    # --- Fee Fields ---
+    'delivery_fee': fields.Float,
+    'takeaway_fee': fields.Float,
+    'dine_in_fee': fields.Float,
+    'platform_fee': fields.Float
 }
 
 order_item_fields = {
@@ -63,12 +68,14 @@ order_fields = {
 
 order_parser = reqparse.RequestParser()
 order_parser.add_argument('restaurant_id', type=int, required=True, help='Restaurant ID is required')
-order_parser.add_argument('order_type', type=str, required=True, choices=('takeaway', 'dine_in'), help='Order type is required')
+order_parser.add_argument('order_type', type=str, required=True, choices=('delivery', 'takeaway', 'dine_in'), help='Order type is required')
 order_parser.add_argument('items', type=list, location='json', required=True, help='Order items are required')
 # ✅ MODIFIED: Added optional arguments for scheduling and coupons
 order_parser.add_argument('coupon_code', type=str, location='json')
 order_parser.add_argument('is_scheduled', type=bool, location='json', default=False)
+order_parser.add_argument('is_scheduled', type=bool, location='json', default=False)
 order_parser.add_argument('scheduled_time', type=str, location='json')
+order_parser.add_argument('delivery_address', type=str, location='json')
 
 
 # --- API Resource Classes ---
@@ -124,8 +131,23 @@ class OrderAPI(Resource):
         if not order_items_to_create:
             return {'message': 'Order must contain at least one item'}, 400
 
-        # --- ✅ START: MODIFIED LOGIC FOR COUPONS AND SCHEDULING ---
-        final_amount = total_amount
+        # --- ✅ START: UPDATED FEE LOGIC (DYNAMIC) ---
+        # 1. Platform Fee (From Restaurant Config)
+        platform_fee = restaurant.platform_fee if restaurant.platform_fee is not None else 7.0
+        
+        # 2. Service/Order Type Fee (From Restaurant Config)
+        service_fee = 0.0
+        if args['order_type'] == 'delivery':
+            service_fee = restaurant.delivery_fee if restaurant.delivery_fee is not None else 50.0
+        elif args['order_type'] == 'takeaway':
+             service_fee = restaurant.takeaway_fee if restaurant.takeaway_fee is not None else 20.0
+        elif args['order_type'] == 'dine_in':
+             service_fee = restaurant.dine_in_fee if restaurant.dine_in_fee is not None else 10.0
+        
+        # Base total before discount
+        gross_total = total_amount + platform_fee + service_fee
+        
+        final_amount = gross_total
         discount_amount = 0
         coupon_id = None
 
@@ -134,12 +156,15 @@ class OrderAPI(Resource):
             if coupon and (coupon.restaurant_id is None or coupon.restaurant_id == restaurant.id):
                 coupon_id = coupon.id
                 if coupon.discount_type == 'Percentage':
-                    discount_amount = (total_amount * coupon.discount_value) / 100
+                    discount_amount = (total_amount * coupon.discount_value) / 100 # Discount usually applies to item total only
                 elif coupon.discount_type == 'Fixed':
                     discount_amount = coupon.discount_value
-                final_amount = max(0, total_amount - discount_amount)
+                
+                # Ensure we don't drop below 0
+                final_amount = max(0, gross_total - discount_amount)
             else:
                 return {'message': 'Invalid or expired coupon code.'}, 400
+        # --- ✅ END: UPDATED FEE LOGIC ---
 
         # Create the base order object
         new_order_data = {
@@ -151,7 +176,8 @@ class OrderAPI(Resource):
             'qr_payload': ''.join(random.choices(string.ascii_letters + string.digits, k=20)),
             'items': order_items_to_create,
             'coupon_id': coupon_id,
-            'discount_amount': round(discount_amount, 2)
+            'discount_amount': round(discount_amount, 2),
+            'delivery_address': args.get('delivery_address')
         }
 
         # Add scheduling info only if the order is scheduled

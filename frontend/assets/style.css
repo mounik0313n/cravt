@@ -1,278 +1,459 @@
-/* --- VIBRANT & WARM UI OVERHAUL --- */
-/* A redesign focused on warmth, depth, and energy, inspired by the Bengaluru vibe. */
+/* =========================================
+   PROFESSIONAL BRANDING & TYPOGRAPHY
+   ========================================= */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
-/* --- 1. Root Variables & Base Styles --- */
 :root {
-    --brand-primary: #FF7043; /* Appetizing orange */
-    --brand-accent: #00BFA6;  /* Vibrant mint green */
-    --text-primary: #1F2937;  /* Darker gray for better contrast */
-    --text-secondary: #6B7280;
-    --surface-color: #FFFFFF;
-    --background-color: #FFFBF8; 
-    --border-color: #F3F4F6; /* Lighter border for subtlety */
-    --shadow-sm: 0 4px 8px rgba(0,0,0,0.03);
-    --shadow-md: 0 10px 20px rgba(0,0,0,0.05);
-    --shadow-lg: 0 25px 50px rgba(0,0,0,0.07);
+    /* Primary Brand Color - Preserved as requested */
+    --brand-color: #F8941C;
+    --brand-dark: #d67a0a;
+    --brand-light: #fff3e0;
+
+    /* Modern Neutral Palette */
+    --text-primary: #2d3436;
+    --text-secondary: #636e72;
+    --bg-body: #f7f9fb;
+    --bg-white: #ffffff;
+
+    /* Shadows (Cutting Edge) */
+    --shadow-sm: 0 4px 6px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+    --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    --shadow-glow: 0 0 15px rgba(248, 148, 28, 0.5);
 }
 
 body {
     font-family: 'Poppins', sans-serif;
-    background-color: var(--background-color);
     color: var(--text-primary);
+    background-color: var(--bg-body);
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
 }
 
-section {
-    padding: 6rem 0;
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
 }
 
-/* --- 2. Modern Navbar (Glassmorphism) & Dropdown Fix --- */
-.navbar.sticky-top {
-    background-color: rgba(255, 251, 248, 0.85);
-    backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
-    border-bottom: 1px solid var(--border-color);
-    box-shadow: none;
+/* =========================================
+      UTILITIES & TEXT
+      ========================================= */
+.text-brand {
+    color: var(--brand-color) !important;
+}
+
+.bg-brand {
+    background-color: var(--brand-color) !important;
+    color: white;
+}
+
+/* =========================================
+      BUTTONS (Modern Gradient & Shadow)
+      ========================================= */
+.btn {
+    border-radius: 50px;
+    /* Pillow shape for modern look */
+    font-weight: 600;
+    padding: 10px 24px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.9rem;
+}
+
+.btn-brand {
+    background: linear-gradient(135deg, var(--brand-color) 0%, var(--brand-dark) 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 15px rgba(248, 148, 28, 0.3);
+}
+
+.btn-brand:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(248, 148, 28, 0.4);
+    color: white;
+}
+
+.btn-outline-brand {
+    color: var(--brand-color);
+    border: 2px solid var(--brand-color);
+    background: transparent;
+}
+
+.btn-outline-brand:hover,
+.btn-outline-brand.active {
+    background: var(--brand-color);
+    color: white;
+    box-shadow: var(--shadow-glow);
+}
+
+/* =========================================
+      CARDS & CONTAINERS (Glassmorphism inspired)
+      ========================================= */
+.card {
+    border: none;
+    border-radius: 16px;
+    background: var(--bg-white);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    overflow: hidden;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-md);
+}
+
+.login-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at top right, var(--brand-light), transparent 40%),
+        radial-gradient(circle at bottom left, #eef2f5, transparent 40%);
+}
+
+.login-card {
+    width: 100%;
+    max-width: 450px;
+    box-shadow: var(--shadow-lg) !important;
+}
+
+/* =========================================
+      NAVBAR
+      ========================================= */
+.navbar {
+    box-shadow: var(--shadow-sm);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    /* Frosted glass effect */
 }
 
 .navbar-brand {
-    font-weight: 700;
-    color: var(--brand-primary) !important;
+    font-weight: 800;
+    font-size: 1.5rem;
+    color: var(--text-primary) !important;
 }
 
 .nav-link {
     font-weight: 500;
+    color: var(--text-secondary) !important;
     transition: color 0.2s;
 }
 
-/* ✅ START: DROPDOWN MENU FIX */
-.dropdown-menu {
-    border-radius: 12px;
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-lg);
-    padding: 0.5rem 0;
-}
-.dropdown-item {
-    color: var(--text-primary) !important; /* Ensures text is always visible */
-    font-weight: 500;
-    padding: 0.75rem 1.5rem;
-}
-.dropdown-item:hover, .dropdown-item:focus {
-    color: var(--brand-primary) !important;
-    background-color: var(--background-color);
-}
-/* ✅ END: DROPDOWN MENU FIX */
-
-
-/* --- 3. Upgraded Buttons --- */
-.btn {
-    border-radius: 10px;
-    font-weight: 600;
-    padding: 12px 28px;
-    border: none;
-    transition: all 0.2s ease-in-out;
-}
-/* This is a button, not a dropdown menu itself */
-.btn.dropdown-toggle {
-    background-color: var(--surface-color);
-    color: var(--text-secondary);
-    border: 1px solid var(--border-color);
+.nav-link:hover,
+.nav-link.active {
+    color: var(--brand-color) !important;
 }
 
-.btn-brand {
-    background: linear-gradient(to right, #FF8A65, #FF7043);
-    color: white;
-    box-shadow: 0 4px 15px rgba(255, 112, 67, 0.2);
-}
-.btn-brand:hover {
-    color: white;
-    transform: translateY(-3px);
-    box-shadow: 0 7px 20px rgba(255, 112, 67, 0.3);
-}
-
-.btn-outline-brand {
-    color: var(--brand-primary);
-    border: 2px solid var(--brand-primary);
-    background: transparent;
-}
-.btn-outline-brand:hover, .btn-outline-brand.active {
-    color: white;
-    background-color: var(--brand-primary);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(255, 112, 67, 0.2);
-}
-
-/* --- 4. Refined Cards --- */
-.card {
-    border: 1px solid var(--border-color);
-    border-radius: 18px;
-    box-shadow: var(--shadow-md);
-    background-color: var(--surface-color);
-    transition: all 0.3s ease;
+/* =========================================
+      HERO SECTION
+      ========================================= */
+.hero-section {
+    padding: 80px 0;
+    position: relative;
     overflow: hidden;
 }
-.card:hover {
-    transform: translateY(-10px);
-    box-shadow: var(--shadow-lg);
-}
 
-/* --- 5. Specific Component Styling --- */
-
-/* Hero Section */
-.hero-section {
-    background-image: radial-gradient(circle at 50% 50%, #fffbf8, #fff7f2);
-}
 .hero-title {
-    font-size: 3.8rem;
-    font-weight: 700;
+    font-size: 3.5rem;
     line-height: 1.2;
+    margin-bottom: 2rem;
+    font-weight: 800;
 }
 
-/* Restaurant & Menu Cards */
-.restaurant-card .card-img-top, .menu-card .card-img-top {
-    height: 220px;
+.hero-section img {
+    border-radius: 20px;
+    box-shadow: var(--shadow-lg);
+    transform: rotate(-2deg);
+    transition: transform 0.5s ease;
+}
+
+.hero-section img:hover {
+    transform: rotate(0deg) scale(1.02);
+}
+
+/* =========================================
+      RESTAURANT & MENU CARDS
+      ========================================= */
+.restaurant-card .card-img-top {
+    height: 200px;
     object-fit: cover;
 }
-.card-title {
-    font-weight: 600;
-}
-.card-text {
-    color: var(--text-secondary);
+
+.menu-card .menu-img-container {
+    height: 180px;
+    overflow: hidden;
 }
 
-/* Login/Register & Form Controls */
-.login-container {
-    padding: 4rem 0;
+.menu-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
 }
-.login-card, .profile-card {
-    max-width: 450px;
-    margin: auto;
-    box-shadow: var(--shadow-lg);
+
+.menu-card:hover img {
+    transform: scale(1.1);
 }
+
+/* =========================================
+      FORMS & INPUTS
+      ========================================= */
 .form-control {
     border-radius: 10px;
-    padding: 1rem 1rem; /* Adjusted padding for better vertical alignment */
-    background-color: #F9FAFB;
-    border: 1px solid var(--border-color);
-    transition: all 0.2s ease-in-out;
-    font-weight: 500;
-    height: auto;
-    /* ✅ FIX: Explicitly set text color for all form controls */
-    color: var(--text-primary);
+    border: 1px solid #e1e1e1;
+    padding: 12px 15px;
+    font-size: 1rem;
+    background-color: #fcfcfc;
+    transition: all 0.2s;
 }
+
 .form-control:focus {
-    box-shadow: 0 0 0 4px rgba(255, 112, 67, 0.2);
-    border-color: var(--brand-primary);
-    background-color: var(--surface-color);
+    box-shadow: 0 0 0 3px rgba(248, 148, 28, 0.2);
+    border-color: var(--brand-color);
+    background-color: #fff;
 }
 
-/* ✅ FIX: Custom styling for <select> elements */
-select.form-control {
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
-    background-repeat: no-repeat;
-    background-position: right 1rem center;
-    background-size: 16px 12px;
+.input-group-text {
+    background: #fff;
+    border-left: none;
+    border-radius: 0 10px 10px 0;
 }
 
-
-/* Order Summary & Detail Cards */
-.order-summary-card {
-    background-color: #FFF3E0;
-    border: 1px solid #FFE0B2;
+/* =========================================
+      FOOTER
+      ========================================= */
+.footer-section {
+    background-color: #2d3436;
+    color: white;
+    padding: 60px 0 20px;
+    margin-top: 60px;
 }
 
-/* Status Badges */
-.status-badge {
-    padding: 6px 14px;
+.footer-section h5 {
+    color: white;
+    margin-bottom: 20px;
+}
+
+.footer-section p,
+.footer-section a {
+    color: #b2bec3;
+    text-decoration: none;
+}
+
+.footer-section a:hover {
+    color: var(--brand-color);
+}
+
+/*Adjust for smaller screens*/
+@media (max-width: 992px) {
+    .hero-title {
+        font-size: 3rem;
+    }
+
+    .navbar-brand {
+        font-size: 1.3rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .hero-section {
+        text-align: center !important;
+        padding: 60px 0;
+    }
+
+    .hero-section .d-flex {
+        justify-content: center !important;
+    }
+
+    .hero-title {
+        font-size: 2.2rem;
+    }
+
+    .hero-section img {
+        margin-top: 30px;
+        max-width: 80%;
+        transform: rotate(0);
+    }
+
+    /* Adjust buttons for mobile touch targets */
+    .btn-lg {
+        padding: 12px 20px;
+        font-size: 1rem;
+        width: 100%;
+        /* Full width buttons on mobile */
+        margin-bottom: 10px;
+        margin-right: 0 !important;
+    }
+
+    .d-flex.justify-content-center.justify-content-lg-start {
+        flex-direction: column;
+    }
+
+    /* Responsive Cards */
+    .card-columns {
+        column-count: 1;
+    }
+}
+
+/* =========================================
+      GLASSMORPHISM & PREMIUM UTILITIES
+      ========================================= */
+.card-glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+}
+
+.gradient-text {
+    background: -webkit-linear-gradient(45deg, var(--brand-color), var(--brand-dark));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Dashboard Stats Cards */
+.stat-card {
     border-radius: 20px;
-    font-weight: 600;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-.status-badge.completed { background-color: #DCFCE7; color: #166534; }
-.status-badge.preparing, .status-badge.placed, .status-badge.ready { background-color: #FEF9C3; color: #854D0E; }
-.status-badge.cancelled, .status-badge.rejected { background-color: #F3F4F6; color: #4B5563; }
-.status-badge.refunded { background-color: #374151; color: #F9FAFB; }
-
-/* Admin & Restaurant Portal */
-.admin-container {
-    padding: 2rem;
-    background-color: #F9FAFB;
-}
-.admin-page-title {
-    font-weight: 700;
-}
-.card-header.bg-white {
-    background-color: #fff !important;
-    border-bottom: 1px solid var(--border-color);
-}
-.table {
-    font-size: 0.9rem;
-}
-.table > tbody > tr > td {
-    color: var(--text-secondary);
-}
-.table > thead > tr > th {
-    color: var(--text-primary);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
     border: none;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    overflow: hidden;
+    position: relative;
 }
-.table-hover tbody tr:hover {
-    background-color: #F9FAFB;
+
+.stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0));
+    pointer-events: none;
 }
+
 .stat-card:hover {
-    border-color: var(--brand-primary);
+    transform: translateY(-5px) scale(1.02);
+    box-shadow: var(--shadow-lg);
 }
+
+.stat-icon-bg {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 15px;
+}
+
+.bg-light-brand {
+    background-color: rgba(248, 148, 28, 0.1);
+    color: var(--brand-color);
+}
+
+.bg-light-success {
+    background-color: rgba(46, 204, 113, 0.1);
+    color: #2ecc71;
+}
+
+.bg-light-info {
+    background-color: rgba(52, 152, 219, 0.1);
+    color: #3498db;
+}
+
 .stat-number {
-    color: var(--brand-primary);
+    font-weight: 800;
+    font-size: 2.5rem;
+    margin-bottom: 5px;
+    letter-spacing: -1px;
 }
 
-/* Restaurant Order Queue */
-.order-column {
-    background-color: #F9FAFB;
-    border-radius: 12px;
-    padding: 20px;
-    height: 100%;
+/* Table Styling */
+.table-hover tbody tr {
+    transition: background-color 0.2s;
 }
-.order-card {
-    box-shadow: var(--shadow-sm);
-    border: 1px solid var(--border-color);
-    border-left: 4px solid var(--brand-primary);
-    margin-bottom: 1rem;
+
+.table-hover tbody tr:hover {
+    background-color: rgba(248, 148, 28, 0.05);
 }
-.order-card:hover {
+
+/* Badge Pills */
+.badge-pill {
+    padding: 0.5em 1em;
+    font-weight: 500;
+}
+
+/* =========================================
+      NEW UTILITIES FOR ORDER QUEUE
+   ========================================= */
+.bg-gradient-light {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+}
+
+.bg-light-blue {
+    background-color: rgba(52, 152, 219, 0.1);
+    /* Similar to bg-light-info but explicit for columns */
+}
+
+.bg-light-warning {
+    background-color: rgba(241, 196, 15, 0.1);
+}
+
+.text-orange {
+    color: var(--brand-color);
+}
+
+.badge-light-primary {
+    background-color: rgba(52, 152, 219, 0.2);
+    color: #2980b9;
+}
+
+.badge-light-warning {
+    background-color: rgba(243, 156, 18, 0.2);
+    color: #d35400;
+}
+
+.badge-light-success {
+    background-color: rgba(46, 204, 113, 0.2);
+    color: #27ae60;
+}
+
+/* Animations */
+.fade-in {
+    animation: fadeIn 0.8s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.queue-column {
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.queue-column:hover {
+    background: rgba(255, 255, 255, 0.6);
     box-shadow: var(--shadow-md);
-}
-
-/* Time Slot Management */
-.list-group-item {
-    border-color: var(--border-color);
-}
-
-/* --- 6. Star Rating Component --- */
-.star-rating {
-    display: inline-block;
-}
-
-.star {
-    font-size: 2.5rem;          /* Make the stars bigger */
-    color: #d3d3d3;             /* Default color for an empty star (light gray) */
-    cursor: pointer;            /* Show a hand cursor on hover */
-    transition: color 0.2s;     /* Smooth color transition */
-    padding: 0 5px;             /* Add some space between stars */
-}
-
-.star:hover {
-    color: #ffc107;             /* Gold color on hover */
-}
-
-.star.filled {
-    color: #ffc107;             /* Gold color for a selected (filled) star */
 }

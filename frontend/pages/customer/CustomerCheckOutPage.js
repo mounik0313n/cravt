@@ -1,30 +1,58 @@
 import apiService from '../../utils/apiService.js';
+import store from '../../utils/store.js'; // Ensure store is imported if referenced directly in template/scripts
 
 const CustomerCheckoutPage = {
     template: `
         <div class="container my-5">
-            <h2 class="text-center mb-4">Finalize Your <span class="text-brand">Order</span></h2>
+            <h2 class="text-center mb-5 font-weight-bold">Finalize Your <span class="text-brand">Order</span></h2>
             <div class="row">
                 <div class="col-lg-7">
-                    <div class="card mb-4">
-                        <div class="card-body">
-                            <h4 class="card-title">1. Choose Order Type</h4>
-                            <div class="btn-group btn-group-toggle d-flex">
-                                <label class="btn btn-outline-brand w-100" :class="{ active: orderType === 'takeaway' }" @click="selectOrderType('takeaway')">
-                                    <input type="radio" name="orderTypeOptions" value="takeaway" autocomplete="off"> <i class="fas fa-shopping-bag mr-2"></i>Takeaway
-                                </label>
-                                <label class="btn btn-outline-brand w-100" :class="{ active: orderType === 'dine_in' }" @click="selectOrderType('dine_in')">
-                                    <input type="radio" name="orderTypeOptions" value="dine_in" autocomplete="off"> <i class="fas fa-utensils mr-2"></i>Dine-In
-                                </label>
+                    <!-- 1. Order Type Selection -->
+                    <div class="card card-glass mb-4 border-0">
+                        <div class="card-body p-4">
+                            <h5 class="card-title font-weight-bold mb-4">1. Choose Order Type</h5>
+                            <div class="row">
+                                <div class="col-4 px-1">
+                                    <label class="btn btn-outline-brand w-100 shadow-sm p-2" :class="{ active: orderType === 'delivery' }" @click="selectOrderType('delivery')">
+                                        <input type="radio" name="orderTypeOptions" value="delivery" autocomplete="off"> 
+                                        <div class="text-center">
+                                            <i class="fas fa-truck mb-1"></i><br>Delivery
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="col-4 px-1">
+                                    <label class="btn btn-outline-brand w-100 shadow-sm p-2" :class="{ active: orderType === 'takeaway' }" @click="selectOrderType('takeaway')">
+                                        <input type="radio" name="orderTypeOptions" value="takeaway" autocomplete="off"> 
+                                        <div class="text-center">
+                                            <i class="fas fa-shopping-bag mb-1"></i><br>Takeaway
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="col-4 px-1">
+                                    <label class="btn btn-outline-brand w-100 shadow-sm p-2" :class="{ active: orderType === 'dine_in' }" @click="selectOrderType('dine_in')">
+                                        <input type="radio" name="orderTypeOptions" value="dine_in" autocomplete="off"> 
+                                        <div class="text-center">
+                                            <i class="fas fa-utensils mb-1"></i><br>Dine-In
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- Address Input for Delivery -->
+                            <div v-if="orderType === 'delivery'" class="mt-4 pt-3 border-top">
+                                <label class="font-weight-bold">Delivery Address</label>
+                                <textarea class="form-control" v-model="deliveryAddress" rows="2" placeholder="Enter your full delivery address..."></textarea>
+                                <small class="text-muted" v-if="!deliveryAddress">Address is required for delivery.</small>
                             </div>
                         </div>
                     </div>
 
-                    <div class="card mb-4">
-                        <div class="card-body">
-                            <h4 class="card-title">2. Choose When</h4>
+                    <!-- 2. Scheduling -->
+                    <div class="card card-glass mb-4 border-0">
+                        <div class="card-body p-4">
+                            <h5 class="card-title font-weight-bold mb-4">2. Choose When</h5>
                             
-                            <div v-if="orderType === 'takeaway'" class="form-group">
+                            <div class="form-group mb-4">
                                 <div class="btn-group btn-group-toggle d-flex">
                                     <label class="btn btn-outline-secondary w-100" :class="{ active: scheduleChoice === 'now' }" @click="scheduleChoice = 'now'">
                                         <input type="radio" value="now"> Order Now
@@ -36,25 +64,27 @@ const CustomerCheckoutPage = {
                             </div>
                             
                             <div v-if="isScheduling">
-                                <hr v-if="orderType === 'takeaway'">
-                                <p v-if="orderType === 'dine_in'" class="text-muted small">Please select a date and time for your reservation.</p>
+                                <p v-if="orderType === 'dine_in'" class="text-muted small mb-3">Reserve a table.</p>
+                                <p v-else class="text-muted small mb-3">Schedule your {{ orderType }}.</p>
 
-                                <div v-if="slotsLoading" class="text-muted">Loading available slots...</div>
+                                <div v-if="slotsLoading" class="text-muted text-center py-3">
+                                    <div class="spinner-border spinner-border-sm text-brand" role="status"></div> Loading...
+                                </div>
                                 <div v-if="slotsError" class="alert alert-warning">{{ slotsError }}</div>
                                 
                                 <div v-if="!slotsLoading && availableDays.length > 0" class="form-row">
                                     <div class="form-group col-md-6">
-                                        <label for="scheduleDate">Select Date</label>
-                                        <select id="scheduleDate" class="form-control" v-model="selectedDate">
+                                        <label for="scheduleDate" class="font-weight-bold">Select Date</label>
+                                        <select id="scheduleDate" class="form-control form-control-lg" v-model="selectedDate">
                                             <option v-for="day in availableDays" :key="day.date_value" :value="day.date_value">
                                                 {{ day.date_display }}
                                             </option>
                                         </select>
                                     </div>
                                     <div class="form-group col-md-6">
-                                        <label for="scheduleTime">Select Time</label>
-                                        <select id="scheduleTime" class="form-control" v-model="selectedTime" required>
-                                            <option :value="null">-- Please select --</option>
+                                        <label for="scheduleTime" class="font-weight-bold">Select Time</label>
+                                        <select id="scheduleTime" class="form-control form-control-lg" v-model="selectedTime" required>
+                                            <option :value="null">-- Pick a Time --</option>
                                             <option v-for="slot in slotsForSelectedDay" :key="slot.value" :value="slot.value">
                                                 {{ slot.display }}
                                             </option>
@@ -68,30 +98,32 @@ const CustomerCheckoutPage = {
                         </div>
                     </div>
 
-                    <div class="card">
-                        <div class="card-body">
-                            <h4 class="card-title">3. Apply Coupon</h4>
+                    <!-- 3. Coupon -->
+                    <div class="card card-glass border-0">
+                        <div class="card-body p-4">
+                            <h5 class="card-title font-weight-bold mb-4">3. Apply Coupon</h5>
 
-                            <div v-if="couponsLoading" class="text-muted small my-3">Loading available coupons...</div>
+                            <div v-if="couponsLoading" class="text-muted small my-3">Checking for deals...</div>
                             <div v-if="!couponsLoading && availableCoupons.length > 0" class="mb-3">
-                                <small class="text-muted d-block mb-2">Available for you:</small>
-                                <div>
+                                <small class="text-muted d-block mb-2 font-weight-bold">BEST DEALS FOR YOU:</small>
+                                <div class="d-flex flex-wrap">
                                     <button v-for="coupon in availableCoupons" 
                                             :key="coupon.code" 
-                                            class="btn btn-sm btn-outline-success mr-2 mb-2"
+                                            class="btn btn-sm btn-outline-success mr-2 mb-2 rounded-pill shadow-sm"
                                             @click="selectAndApplyCoupon(coupon)"
                                             :disabled="!!appliedCoupon">
-                                        {{ coupon.code }}
+                                        <i class="fas fa-tag mr-1"></i> {{ coupon.code }}
                                     </button>
                                 </div>
                             </div>
 
                             <div v-if="couponError" class="alert alert-danger">{{ couponError }}</div>
-                            <div v-if="appliedCoupon" class="alert alert-success">
-                                <strong>'{{ appliedCoupon }}' applied!</strong> You saved ₹{{ discountAmount.toLocaleString('en-IN') }}.
+                            <div v-if="appliedCoupon" class="alert alert-success d-flex align-items-center">
+                                <i class="fas fa-check-circle mr-2"></i>
+                                <span>'{{ appliedCoupon }}' applied! You saved <strong>₹{{ discountAmount.toLocaleString('en-IN') }}</strong></span>
                             </div>
-                            <div class="input-group">
-                                <input type="text" class="form-control" v-model="couponCode" placeholder="Enter coupon code" :disabled="!!appliedCoupon">
+                            <div class="input-group mt-3">
+                                <input type="text" class="form-control form-control-lg" v-model="couponCode" placeholder="Enter promo code" :disabled="!!appliedCoupon">
                                 <div class="input-group-append">
                                     <button class="btn btn-brand" @click="applyCoupon" :disabled="isApplyingCoupon || !!appliedCoupon">
                                         {{ isApplyingCoupon ? '...' : 'Apply' }}
@@ -102,28 +134,45 @@ const CustomerCheckoutPage = {
                     </div>
                 </div>
 
-                <div class="col-lg-5">
-                    <div class="card order-summary-card">
-                        <div class="card-body">
+                <!-- Order Summary -->
+                <div class="col-lg-5 mt-4 mt-lg-0">
+                    <div class="card stat-card card-glass h-100 border-0 sticky-top" style="top: 100px; z-index: 1;">
+                        <div class="card-body p-4">
                             <div v-if="error" class="alert alert-danger">{{ error }}</div>
-                            <h4 class="card-title">Order Summary</h4>
-                            <ul class="list-group list-group-flush">
-                                <li class="list-group-item d-flex justify-content-between">
-                                    <span>Subtotal</span><strong>₹{{ subtotal.toLocaleString('en-IN') }}</strong>
+                            <h4 class="card-title font-weight-bold mb-4">Order Summary</h4>
+                            
+                            <ul class="list-group list-group-flush mb-4">
+                                <li class="list-group-item d-flex justify-content-between bg-transparent border-bottom-0 pb-1 px-0">
+                                    <span class="text-muted">Item Total</span>
+                                    <span class="font-weight-medium">₹{{ subtotal.toLocaleString('en-IN') }}</span>
                                 </li>
-                                <li class="list-group-item d-flex justify-content-between">
-                                    <span>Delivery Fee</span><strong>₹{{ deliveryFee.toLocaleString('en-IN') }}</strong>
+                                <!-- Logic Change: Dynamic Service Fee & Platform Fee -->
+                                <li class="list-group-item d-flex justify-content-between bg-transparent border-bottom-0 py-1 px-0">
+                                    <span class="text-muted">
+                                        {{ orderType === 'delivery' ? 'Delivery Fee' : (orderType === 'takeaway' ? 'Takeaway Fee' : 'Dine-In Fee') }}
+                                    </span>
+                                    <span class="font-weight-medium">₹{{ deliveryFee.toLocaleString('en-IN') }}</span>
                                 </li>
-                                <li v-if="appliedCoupon" class="list-group-item d-flex justify-content-between text-success">
-                                    <span>Discount</span><strong>-₹{{ discountAmount.toLocaleString('en-IN') }}</strong>
+                                <li class="list-group-item d-flex justify-content-between bg-transparent border-bottom-0 py-1 px-0">
+                                    <span class="text-muted">Platform Fee</span>
+                                    <span class="font-weight-medium">₹{{ platformFee.toLocaleString('en-IN') }}</span>
                                 </li>
-                                <li class="list-group-item d-flex justify-content-between total-row">
-                                    <h5>Total</h5><h5>₹{{ total.toLocaleString('en-IN') }}</h5>
+                                <li v-if="appliedCoupon" class="list-group-item d-flex justify-content-between bg-transparent border-bottom-0 py-1 px-0 text-success">
+                                    <span><i class="fas fa-tag mr-1"></i> Discount</span>
+                                    <span>-₹{{ discountAmount.toLocaleString('en-IN') }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between bg-transparent border-top mt-2 pt-3 px-0">
+                                    <h5 class="font-weight-bold">To Pay</h5>
+                                    <h5 class="font-weight-bold text-brand">₹{{ total.toLocaleString('en-IN') }}</h5>
                                 </li>
                             </ul>
-                            <button class="btn btn-brand btn-block mt-4" @click="placeOrder" :disabled="isPlacing || isPaying || (isScheduling && !selectedTime)">
-                                {{ isPaying ? 'Processing Payment...' : (isPlacing ? 'Placing Order...' : 'Place Order') }}
+                            
+                            <button class="btn btn-brand btn-block btn-lg shadow-lg" @click="placeOrder" :disabled="isPlacing || isPaying || (isScheduling && !selectedTime)">
+                                <span v-if="isPaying">Processing... <i class="fas fa-spinner fa-spin ml-1"></i></span>
+                                <span v-else-if="isPlacing">Placing Order...</span>
+                                <span v-else>Place Order <i class="fas fa-arrow-right ml-2"></i></span>
                             </button>
+                            <p class="text-center text-muted small mt-3"><i class="fas fa-lock mr-1"></i> Secure Checkout</p>
                         </div>
                     </div>
                 </div>
@@ -135,8 +184,15 @@ const CustomerCheckoutPage = {
             isPlacing: false,
             isPaying: false,
             error: null,
-            deliveryFee: 50.00,
-            orderType: 'takeaway',
+            // Logic: Default fees, overridden by API
+            baseDeliveryFee: 50.00,
+            takeawayFee: 20.00,
+            dineInFee: 10.00,
+            platformFeeCost: 7.00,
+
+            restaurantInfo: null, // Store restaurant details
+
+            orderType: 'delivery', // Default to Delivery now as per standard
             scheduleChoice: 'now',
             slotsLoading: false,
             slotsError: null,
@@ -149,19 +205,46 @@ const CustomerCheckoutPage = {
             appliedCoupon: null,
             discountAmount: 0,
             availableCoupons: [],
-            couponsLoading: true
+            couponsLoading: true,
+            deliveryAddress: (store.getters.currentUser && store.getters.currentUser.address) ? store.getters.currentUser.address : ''
         };
     },
     computed: {
         ...Vuex.mapGetters(['cartItems', 'cartTotal', 'cartRestaurantId']),
-        subtotal() { 
-            return this.cartTotal; 
+        subtotal() {
+            return this.cartTotal;
         },
-        total() { 
-            return Math.max(0, this.subtotal + this.deliveryFee - this.discountAmount); 
+        deliveryFee() {
+            // Priority: API Value -> Logic Fallback -> Default
+            let fee = 0;
+            if (this.orderType === 'delivery') {
+                fee = this.restaurantInfo && this.restaurantInfo.delivery_fee != null
+                    ? this.restaurantInfo.delivery_fee
+                    : this.baseDeliveryFee;
+            } else if (this.orderType === 'takeaway') {
+                fee = this.restaurantInfo && this.restaurantInfo.takeaway_fee != null
+                    ? this.restaurantInfo.takeaway_fee
+                    : this.takeawayFee;
+            } else if (this.orderType === 'dine_in') {
+                fee = this.restaurantInfo && this.restaurantInfo.dine_in_fee != null
+                    ? this.restaurantInfo.dine_in_fee
+                    : this.dineInFee;
+            }
+            return fee;
         },
-        isScheduling() { 
-            return this.orderType === 'dine_in' || this.scheduleChoice === 'later'; 
+        platformFee() {
+            // Dynamic Platform Fee
+            if (this.restaurantInfo && this.restaurantInfo.platform_fee != null) {
+                return this.restaurantInfo.platform_fee;
+            }
+            return this.platformFeeCost;
+        },
+        total() {
+            // Total = Subtotal + Fees - Discount
+            return Math.max(0, this.subtotal + this.deliveryFee + this.platformFee - this.discountAmount);
+        },
+        isScheduling() {
+            return this.orderType === 'dine_in' || this.scheduleChoice === 'later';
         },
         slotsForSelectedDay() {
             if (!this.selectedDate) return [];
@@ -170,7 +253,6 @@ const CustomerCheckoutPage = {
         }
     },
     watch: {
-        // ✅ FIX: Trigger fetch when isScheduling becomes true
         isScheduling(newVal) {
             if (newVal) {
                 this.fetchAvailableSlots();
@@ -179,18 +261,28 @@ const CustomerCheckoutPage = {
                 this.selectedTime = null;
             }
         },
-        selectedDate() { 
-            this.selectedTime = null; 
+        selectedDate() {
+            this.selectedTime = null;
         }
     },
     mounted() {
-        // If we load the page and we are already scheduling (e.g. refresh on dine-in), fetch slots
         if (this.isScheduling) {
             this.fetchAvailableSlots();
         }
         this.fetchApplicableCoupons();
+        this.fetchRestaurantDetails(); // Fetch fee config
     },
     methods: {
+        async fetchRestaurantDetails() {
+            if (!this.cartRestaurantId) return;
+            try {
+                const data = await apiService.get(`/api/restaurants/${this.cartRestaurantId}`);
+                this.restaurantInfo = data;
+                // Update local defaults if needed, but computed properties handle it
+            } catch (e) {
+                console.warn("Could not fetch restaurant specific fees, using defaults.", e);
+            }
+        },
         selectOrderType(type) {
             this.orderType = type;
             this.selectedDate = null;
@@ -200,20 +292,15 @@ const CustomerCheckoutPage = {
             this.availableDays = [];
         },
         async fetchAvailableSlots() {
-            // ✅ FIX: Removed the check for selectedDate. We need to fetch slots first!
             if (!this.isScheduling) return;
-            
+
             this.slotsLoading = true;
             this.slotsError = null;
             try {
-                // ✅ FIX: Corrected URL from 'restaurant' (singular) to 'restaurants' (plural)
-                // ✅ FIX: Removed '?date=' parameter because the backend returns all days at once
+                // apiService.get shortcut
                 const data = await apiService.get(`/api/restaurants/${this.cartRestaurantId}/available-slots`);
-                
-                // ✅ FIX: Backend returns an array, not { days: [] }
                 this.availableDays = data || [];
-                
-                // ✅ UX: Automatically select the first available date
+
                 if (this.availableDays.length > 0 && !this.selectedDate) {
                     this.selectedDate = this.availableDays[0].date_value;
                 }
@@ -284,13 +371,13 @@ const CustomerCheckoutPage = {
 
                 try {
                     await this.loadRazorpayScript();
-                    
+
                     const options = {
                         key: razorpay_key,
                         amount: amount,
                         currency: 'INR',
                         name: 'Cravt',
-                        description: `Order #${orderId}`,
+                        description: `Order #\${orderId}`,
                         order_id: razorpay_order_id,
                         handler: async (response) => {
                             this.isPaying = false;
@@ -307,63 +394,90 @@ const CustomerCheckoutPage = {
                                 this.$router.push({ name: 'OrderDetail', params: { id: orderId } });
                             } catch (verErr) {
                                 console.error('Verification failed', verErr);
-                                alert('Payment succeeded but verification failed. Please contact support.');
+                                alert('Payment succeeded but verification failed. Contact support.');
                                 this.$router.push({ name: 'OrderDetail', params: { id: orderId } });
                             }
                         },
                         prefill: {
-                            name: (this.$store && this.$store.getters && this.$store.getters.currentUser) ? (this.$store.getters.currentUser.name || '') : '',
-                            email: (this.$store && this.$store.getters && this.$store.getters.currentUser) ? (this.$store.getters.currentUser.email || '') : ''
+                            name: (store.getters.currentUser) ? (store.getters.currentUser.name || '') : '',
+                            email: (store.getters.currentUser) ? (store.getters.currentUser.email || '') : '',
+                            contact: (store.getters.currentUser) ? (store.getters.currentUser.phone || '') : '' // Important for UPI
                         },
-                        theme: { color: '#E65100' }
+                        theme: { color: '#F8941C' },
+                        config: {
+                            display: {
+                                blocks: {
+                                    upi: {
+                                        name: 'Pay via UPI',
+                                        instruments: [
+                                            { method: 'upi' }
+                                        ]
+                                    },
+                                    qr: {
+                                        name: 'Scan QR Code',
+                                        instruments: [
+                                            { method: 'upi', flows: ['qr'] }
+                                        ]
+                                    },
+                                    other: {
+                                        name: 'Other Payment Methods',
+                                        instruments: [
+                                            { method: 'card' },
+                                            { method: 'netbanking' }
+                                        ]
+                                    }
+                                },
+                                sequence: ['block.upi', 'block.qr', 'block.other'],
+                                preferences: {
+                                    show_default_blocks: true
+                                }
+                            }
+                        }
                     };
+
+                    console.log(`Initializing Razorpay with Amount: ${options.amount} (derived from Order ID: ${orderId})`);
 
                     const rzp = new window.Razorpay(options);
                     rzp.on('payment.failed', (resp) => {
                         this.isPaying = false;
                         console.error('Payment failed', resp);
-                        alert('Payment failed: ' + (resp.error && resp.error.description || 'Unknown error'));
+                        alert('Payment failed: ' + (resp.error.description || 'Unknown error'));
                     });
                     rzp.open();
-                    
-                } catch (razorpayLoadError) {
-                    console.log('Razorpay SDK not available, using development mode payment');
-                    
-                    const mockPaymentId = 'pay_dev_' + Math.random().toString(36).substr(2, 9);
-                    const mockSignature = 'mock_signature_' + Math.random().toString(36).substr(2, 9);
-                    
-                    this.isPaying = false;
-                    try {
-                        const verify = await apiService.post('/api/payments/verify', {
-                            order_id: orderId,
-                            razorpay_order_id: razorpay_order_id,
-                            razorpay_payment_id: mockPaymentId,
-                            razorpay_signature: mockSignature
-                        });
 
-                        this.$store.dispatch('clearCart');
-                        alert('Payment processed successfully (Development Mode)');
-                        this.$router.push({ name: 'OrderDetail', params: { id: orderId } });
-                    } catch (verErr) {
-                        console.error('Verification failed', verErr);
-                        alert('Payment processing failed.');
-                        this.$router.push({ name: 'OrderDetail', params: { id: orderId } });
-                    }
+                } catch (razorpayLoadError) {
+                    console.log('Razorpay SDK error/dev mode', razorpayLoadError);
+                    // Mock payment logic for dev
+                    this.isPaying = false;
+                    const verify = await apiService.post('/api/payments/verify', {
+                        order_id: orderId,
+                        razorpay_order_id: razorpay_order_id,
+                        razorpay_payment_id: 'pay_mock_' + Date.now(),
+                        razorpay_signature: 'mock_sig'
+                    });
+                    this.$store.dispatch('clearCart');
+                    alert('Payment successful (Dev Mode)!');
+                    this.$router.push({ name: 'OrderDetail', params: { id: orderId } });
                 }
 
             } catch (e) {
                 this.isPaying = false;
                 console.error('Payment error:', e);
                 alert('Unable to start payment: ' + (e.message || e));
-                this.$router.push({ name: 'OrderDetail', params: { id: orderId } });
             }
         },
         async placeOrder() {
             this.isPlacing = true;
             this.error = null;
-            
+
             if (this.isScheduling && !this.selectedTime) {
                 this.error = "Please select a time slot for your scheduled order.";
+                this.isPlacing = false;
+                return;
+            }
+
+            if (this.orderType === 'delivery' && !this.deliveryAddress) {
+                this.error = "Please provide a delivery address.";
                 this.isPlacing = false;
                 return;
             }
@@ -373,7 +487,8 @@ const CustomerCheckoutPage = {
                 order_type: this.orderType,
                 items: this.cartItems.map(item => ({ menu_item_id: item.id, quantity: item.quantity })),
                 coupon_code: this.appliedCoupon,
-                scheduled_time: this.selectedTime 
+                scheduled_time: this.selectedTime,
+                delivery_address: this.deliveryAddress
             };
 
             try {

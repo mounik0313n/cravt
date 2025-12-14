@@ -310,16 +310,8 @@ def get_all_restaurants():
         print(f"Error fetching all restaurants: {e}")
         return jsonify({"message": "An error occurred on the server."}), 500
 
+# (Removed duplicate Restaurant Dashboard, Fees, Orders, and Geolocation endpoints)
 
-
-
-# TODO: Add other restaurant routes here (e.g., /api/restaurant/profile, /api/restaurant/menu)
-# @app.route('/api/restaurant/orders')
-# @auth_required('token')
-# @roles_required('owner')
-# def manage_restaurant_orders():
-#     # Logic to get orders for the current owner's restaurant
-#     return jsonify({"message": "Not yet implemented"}), 501
 
 @app.route('/api/admin/dashboard', methods=['GET'])
 @auth_required('token')
@@ -838,12 +830,34 @@ def place_order():
             price_at_order=menu_item.price
         ))
 
-    # --- 2. Secure Server-Side Coupon Validation & Delivery Fee ---
+    # --- 2. Determine Order Type ---
+    raw_order_type = (data.get('order_type') or 'takeaway').lower()
+    if raw_order_type in ['dinein', 'dine_in', 'dining']:
+        order_type = 'dine_in'
+    elif raw_order_type in ['pickup', 'collect', 'takeaway']:
+        order_type = 'takeaway'
+    elif raw_order_type == 'delivery':
+        order_type = 'delivery'
+    else:
+        order_type = 'takeaway'
+
+    if order_type == 'delivery' and not data.get('delivery_address'):
+        return jsonify({'message': 'Delivery address is required for delivery orders.'}), 400
+
+    # --- 3. Secure Service Fee & Platform Fee ---
+    platform_fee = restaurant.platform_fee if restaurant.platform_fee is not None else 7.0
     
-    # ✅ FIX: Defined Delivery Fee to match Frontend (50.0)
-    DELIVERY_FEE = 50.0 
-    
+    service_fee = 0.0
+    if order_type == 'delivery':
+        service_fee = restaurant.delivery_fee if restaurant.delivery_fee is not None else 50.0
+    elif order_type == 'takeaway':
+        service_fee = restaurant.takeaway_fee if restaurant.takeaway_fee is not None else 20.0
+    elif order_type == 'dine_in':
+        service_fee = restaurant.dine_in_fee if restaurant.dine_in_fee is not None else 10.0
+
+    # Discount Logic
     discount_amount = 0
+    coupon_id = None
     coupon_code = data.get('coupon_code')
     
     if coupon_code:
@@ -853,44 +867,34 @@ def place_order():
             or_(Coupon.restaurant_id == None, Coupon.restaurant_id == restaurant.id)
         ).first()
         if coupon:
+            coupon_id = coupon.id
             if coupon.discount_type == 'Percentage':
                 discount_amount = (subtotal * coupon.discount_value) / 100
-            else: # Fixed amount
+            else: 
                 discount_amount = coupon.discount_value
     
-    # ✅ FIX: Calculate final total including delivery fee
-    # Logic: Subtract discount from subtotal (floor at 0), then add delivery fee.
-    amount_after_discount = max(0, subtotal - discount_amount)
-    final_total = amount_after_discount + DELIVERY_FEE
+    # Final Calculation
+    gross_total = subtotal + platform_fee + service_fee
+    final_total = max(0, gross_total - discount_amount)
 
-    # --- 3. Handle Scheduled Time ---
+    # --- 4. Handle Scheduled Time ---
     scheduled_time_obj = None 
     if data.get('scheduled_time'):
         try:
             iso_string = data['scheduled_time']
-            # Correctly parse the ISO string from JavaScript's toISOString()
             if iso_string.endswith('Z'):
                 iso_string = iso_string[:-1] + "+00:00"
             scheduled_time_obj = datetime.fromisoformat(iso_string)
         except (ValueError, TypeError):
             return jsonify({"message": "Invalid format for scheduled time."}), 400
 
-    # --- 4. Create the Order Object ---
+    # --- 5. Create the Order Object ---
     otp = ''.join(random.choices(string.digits, k=6))
     qr_payload = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
-    
-    # Normalize order type and capture table number for dine-in
-    raw_order_type = (data.get('order_type') or 'takeaway').lower()
-    if raw_order_type in ['dinein', 'dine_in', 'dining']:
-        order_type = 'dine_in'
-    elif raw_order_type in ['pickup', 'collect']:
-        order_type = 'pickup'
-    else:
-        order_type = 'takeaway'
+    table_number = data.get('table_number') if order_type == 'dine_in' else None
 
-    table_number = None
-    if order_type == 'dine_in':
-        table_number = data.get('table_number')
+    # Delivery Address
+    delivery_address = data.get('delivery_address') if order_type == 'delivery' else None
 
     new_order = Order(
         user_id=current_user.id,
@@ -902,10 +906,11 @@ def place_order():
         otp=otp,
         qr_payload=qr_payload,
         items=order_items_to_create,
-        coupon_code=coupon_code,
+        coupon_id=coupon_id,
         discount_amount=round(discount_amount, 2),
         is_scheduled=bool(scheduled_time_obj),
-        scheduled_time=scheduled_time_obj 
+        scheduled_time=scheduled_time_obj,
+        delivery_address=delivery_address
     )
 
     db.session.add(new_order)
@@ -1278,63 +1283,89 @@ def get_rewards_data():
 @roles_required('owner')
 def restaurant_dashboard_stats():
     """ Gathers and returns all key metrics for the restaurant owner's dashboard. """
-    # --- THIS IS THE FIX ---
-    # Use .first() instead of .first_or_404() to handle the case where no restaurant exists
     restaurant = Restaurant.query.filter_by(owner_id=current_user.id).first()
     
-    # If no restaurant is associated with the owner, return a specific error message
     if not restaurant:
         return jsonify({"message": "No restaurant profile found for this account. Please contact support if you believe this is an error."}), 404
     
-    today = date.today()
+    try:
+        today = date.today()
 
-    # --- Calculate Stats ---
-    # Today's Revenue
-    todays_revenue = db.session.query(func.sum(Order.total_amount))\
-        .filter(Order.restaurant_id == restaurant.id, func.cast(Order.created_at, Date) == today).scalar() or 0.0
+        # --- Calculate Stats ---
+        # Today's Revenue
+        todays_revenue = db.session.query(func.sum(Order.total_amount))\
+            .filter(Order.restaurant_id == restaurant.id, func.cast(Order.created_at, Date) == today).scalar() or 0.0
 
-    # Today's Orders
-    todays_orders = db.session.query(func.count(Order.id))\
-        .filter(Order.restaurant_id == restaurant.id, func.cast(Order.created_at, Date) == today).scalar() or 0
+        # Today's Orders
+        todays_orders = db.session.query(func.count(Order.id))\
+            .filter(Order.restaurant_id == restaurant.id, func.cast(Order.created_at, Date) == today).scalar() or 0
+            
+        # Pending Orders (Placed or Preparing)
+        pending_orders = db.session.query(func.count(Order.id))\
+            .filter(Order.restaurant_id == restaurant.id, Order.status.in_(['placed', 'preparing'])).scalar() or 0
+
+        # Recent Orders
+        recent_orders_query = Order.query.filter_by(restaurant_id=restaurant.id)\
+            .order_by(Order.created_at.desc()).limit(5).all()
         
-    # Pending Orders (Placed or Preparing)
-    pending_orders = db.session.query(func.count(Order.id))\
-        .filter(Order.restaurant_id == restaurant.id, Order.status.in_(['placed', 'preparing'])).scalar() or 0
+        recent_orders_data = [{
+            'id': order.id,
+            'customerName': order.customer.name if order.customer else 'Unknown',
+            'items': len(order.items),
+            'total': order.total_amount,
+            'status': order.status.capitalize()
+        } for order in recent_orders_query]
 
-    # Recent Orders
-    recent_orders_query = Order.query.filter_by(restaurant_id=restaurant.id)\
-        .order_by(Order.created_at.desc()).limit(5).all()
+        # Most Popular Items
+        popular_items_query = db.session.query(
+                MenuItem.name,
+                func.count(OrderItem.id).label('order_count')
+            ).join(OrderItem, MenuItem.id == OrderItem.menu_item_id)\
+            .filter(MenuItem.restaurant_id == restaurant.id)\
+            .group_by(MenuItem.name)\
+            .order_by(func.count(OrderItem.id).desc()).limit(5).all()
+
+        popular_items_data = [{'name': name, 'orders': count} for name, count in popular_items_query]
+
+        stats = {
+            'todaysRevenue': round(todays_revenue, 2),
+            'todaysOrders': todays_orders,
+            'pendingOrders': pending_orders,
+        }
+
+        return jsonify({
+            'stats': stats,
+            'recentOrders': recent_orders_data,
+            'popularItems': popular_items_data
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in dashboard stats: {e}")
+        return jsonify({"message": "Failed to load dashboard data."}), 500
+
+@app.route('/api/restaurant/fees', methods=['GET', 'PUT'])
+@auth_required('token')
+@roles_required('owner')
+def manage_restaurant_fees():
+    restaurant = Restaurant.query.filter_by(owner_id=current_user.id).first_or_404()
     
-    recent_orders_data = [{
-        'id': order.id,
-        'customerName': order.customer.name,
-        'items': len(order.items),
-        'total': order.total_amount,
-        'status': order.status.capitalize()
-    } for order in recent_orders_query]
-
-    # Most Popular Items
-    popular_items_query = db.session.query(
-            MenuItem.name,
-            func.count(OrderItem.id).label('order_count')
-        ).join(OrderItem, MenuItem.id == OrderItem.menu_item_id)\
-        .filter(MenuItem.restaurant_id == restaurant.id)\
-        .group_by(MenuItem.name)\
-        .order_by(func.count(OrderItem.id).desc()).limit(5).all()
-
-    popular_items_data = [{'name': name, 'orders': count} for name, count in popular_items_query]
-
-    stats = {
-        'todaysRevenue': round(todays_revenue, 2),
-        'todaysOrders': todays_orders,
-        'pendingOrders': pending_orders,
-    }
-
-    return jsonify({
-        'stats': stats,
-        'recentOrders': recent_orders_data,
-        'popularItems': popular_items_data
-    }), 200
+    if request.method == 'GET':
+        return jsonify({
+            'delivery_fee': restaurant.delivery_fee,
+            'takeaway_fee': restaurant.takeaway_fee,
+            'dine_in_fee': restaurant.dine_in_fee,
+            'platform_fee': restaurant.platform_fee
+        }), 200
+        
+    if request.method == 'PUT':
+        data = request.get_json()
+        if 'delivery_fee' in data: restaurant.delivery_fee = float(data['delivery_fee'])
+        if 'takeaway_fee' in data: restaurant.takeaway_fee = float(data['takeaway_fee'])
+        if 'dine_in_fee' in data: restaurant.dine_in_fee = float(data['dine_in_fee'])
+        if 'platform_fee' in data: restaurant.platform_fee = float(data['platform_fee'])
+        
+        db.session.commit()
+        return jsonify({"message": "Fee settings updated successfully."}), 200
 
 # --- NEW: ORDER QUEUE ENDPOINTS ---
 
@@ -1356,7 +1387,7 @@ def get_restaurant_orders():
 
     orders_data = []
     for order in orders:
-        items_data = [{'name': item.menu_item.name, 'quantity': item.quantity} for item in order.items]
+        items_data = [{'name': item.menu_item.name if item.menu_item else 'Unknown Item', 'quantity': item.quantity} for item in order.items]
         
         # Convert UTC creation time to IST for display
         ist_created_time = order.created_at + timedelta(hours=5, minutes=30)
@@ -1825,9 +1856,27 @@ def get_order_details(order_id):
 
 @app.route('/api/menu-items/regular', methods=['GET'])
 def get_regular_menu():
-    menu_items = MenuItem.query.limit(6).all()
-    menu_data = [{'id': item.id, 'name': item.name, 'price': item.price, 'restaurantId': item.restaurant_id, 'reviews': 0, 'image': item.image_url or f'https://placehold.co/600x400/E65100/FFF?text={item.name.replace(" ", "+")}'} for item in menu_items]
-    return jsonify(menu_data), 200
+    # Fetch a larger pool of items (e.g. 50) to ensure we can find 6 unique ones
+    all_items = MenuItem.query.limit(50).all()
+    
+    unique_items = []
+    seen_names = set()
+    
+    for item in all_items:
+        if item.name not in seen_names:
+            seen_names.add(item.name)
+            unique_items.append({
+                'id': item.id, 
+                'name': item.name, 
+                'price': item.price, 
+                'restaurantId': item.restaurant_id, 
+                'reviews': 0, 
+                'image': item.image_url or f'https://placehold.co/600x400/E65100/FFF?text={item.name.replace(" ", "+")}'
+            })
+            if len(unique_items) == 6:
+                break
+                
+    return jsonify(unique_items), 200
 
 @app.route('/api/favorites', methods=['GET'])
 @auth_required('token')

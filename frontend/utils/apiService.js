@@ -26,9 +26,17 @@ async function apiFetch(url, options = {}) {
     }
 
     // Define the backend URL based on environment
+    let BACKEND_URL = ''; // Default to relative path (standard for same-origin/hosted together)
+
+    // HELPER: This block ONLY runs on your machine. It does NOT run on Render.
+    // It allows you to develop locally without complex setup.
     // When hosted on Render (same origin), we use relative paths.
-    // Localhost needs full URL if on different port, but here we assume same origin or proxy.
-    const BACKEND_URL = '';
+    // If running locally (port 5500 or 8080), assume backend is on port 10000.
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        if (window.location.port !== '10000') {
+            BACKEND_URL = 'http://localhost:10000';
+        }
+    }
 
     // Build the full request options
     const config = {
@@ -37,7 +45,7 @@ async function apiFetch(url, options = {}) {
     };
 
     // Perform the fetch request
-    const response = await fetch(url, config);
+    const response = await fetch(BACKEND_URL + url, config);
 
     // Check if the response is ok (status 200-299)
     if (!response.ok) {
