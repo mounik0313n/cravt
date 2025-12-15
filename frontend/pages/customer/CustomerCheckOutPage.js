@@ -54,11 +54,11 @@ const CustomerCheckoutPage = {
                             
                             <div class="form-group mb-4">
                                 <div class="btn-group btn-group-toggle d-flex">
-                                    <label class="btn btn-outline-secondary w-100" :class="{ active: scheduleChoice === 'now' }" @click="scheduleChoice = 'now'">
-                                        <input type="radio" value="now"> Order Now
+                                    <label class="btn btn-outline-secondary w-100 py-3 font-weight-bold" :class="{ active: scheduleChoice === 'now' }" @click="scheduleChoice = 'now'">
+                                        <input type="radio" value="now"> ORDER NOW
                                     </label>
-                                    <label class="btn btn-outline-secondary w-100" :class="{ active: scheduleChoice === 'later' }" @click="scheduleChoice = 'later'">
-                                        <input type="radio" value="later"> Schedule for Later
+                                    <label class="btn btn-outline-secondary w-100 py-3 font-weight-bold" :class="{ active: scheduleChoice === 'later' }" @click="scheduleChoice = 'later'">
+                                        <input type="radio" value="later"> SCHEDULE FOR LATER
                                     </label>
                                 </div>
                             </div>

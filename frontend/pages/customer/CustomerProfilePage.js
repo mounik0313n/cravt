@@ -68,7 +68,7 @@ const CustomerProfilePage = {
             this.successMessage = null;
             this.error = null;
             this.isSaving = true;
-            
+
             try {
                 // --- THIS IS THE FIX ---
                 // No more manual fetch or token handling.
