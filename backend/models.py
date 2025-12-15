@@ -117,6 +117,9 @@ class Order(db.Model):
     razorpay_payment_id = db.Column(db.String(255), nullable=True)
     payment_status = db.Column(db.String(50), default='pending')
     payment_amount = db.Column(db.Float, nullable=True)
+    # --- ✅ START: ADDED ACCEPTANCE STATUS ---
+    acceptance_status = db.Column(db.String(50), default='pending') # pending, accepted, rejected
+    # --- ✅ END: ADDED ACCEPTANCE STATUS ---
     
     review = db.relationship('Review', backref='order', uselist=False, cascade="all, delete-orphan")
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade="all, delete-orphan")

@@ -113,7 +113,7 @@ const store = new Vuex.Store({
 
         logout({ commit }) {
             commit('CLEAR_AUTH');
-            commit('CLEAR_CART'); // Clear cart on logout
+            // Cart intentionally NOT cleared on logout
         },
 
         // Set auth token/user when logging in via external providers (Firebase)
@@ -121,7 +121,7 @@ const store = new Vuex.Store({
             commit('SET_TOKEN', token);
             commit('SET_USER', user);
         },
-        
+
         // Exchange a Firebase ID token with the backend for an app token
         async exchangeFirebaseIdToken({ commit }, idToken) {
             const response = await fetch('/api/auth/firebase', {

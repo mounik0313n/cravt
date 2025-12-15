@@ -27,9 +27,24 @@ const CustomerOrderHistoryPage = {
                                 <h6 class="text-muted">DATE</h6>
                                 <strong>{{ order.date }}</strong>
                             </div>
+                            <!-- ✅ ADDED: Acceptance Status -->
+                            <div class="col-md-2" v-if="order.acceptance_status && order.acceptance_status !== 'pending'">
+                                <h6 class="text-muted">ACCEPTED BY</h6>
+                                <span class="badge" :class="order.acceptance_status === 'accepted' ? 'badge-success' : 'badge-danger'">
+                                    {{ order.acceptance_status.toUpperCase() }}
+                                </span>
+                            </div>
+                            <div class="col-md-2" v-else>
+                                <!-- Spacer if pending -->
+                            </div>
+
                             <div class="col-md-2">
                                 <h6 class="text-muted">TOTAL</h6>
                                 <strong>₹{{ order.total.toLocaleString('en-IN') }}</strong>
+                                <!-- ✅ ADDED: Transaction ID -->
+                                <div v-if="order.transaction_id" class="text-muted small mt-1" style="font-size: 0.75rem;">
+                                    Txn: {{ order.transaction_id.slice(-8) }}...
+                                </div>
                             </div>
                             <div class="col-md-2 text-center">
                                 <span class="status-badge" :class="order.status.toLowerCase()">{{ order.status }}</span>

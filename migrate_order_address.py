@@ -2,7 +2,7 @@ import sqlite3
 import os
 
 # Database file path
-DB_PATH = os.path.join(os.getcwd(), 'instance', 'cravt.db')
+DB_PATH = os.path.join(os.getcwd(), 'instance', 'db.sqlite3')
 
 def migrate():
     if not os.path.exists(DB_PATH):
@@ -14,7 +14,7 @@ def migrate():
 
     try:
         # Check if column exists
-        cursor.execute("PRAGMA table_info(order)")
+        cursor.execute("PRAGMA table_info(`order`)")
         columns = [info[1] for info in cursor.fetchall()]
         
         if 'delivery_address' not in columns:

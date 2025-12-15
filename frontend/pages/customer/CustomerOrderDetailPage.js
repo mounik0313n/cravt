@@ -38,6 +38,11 @@ const CustomerOrderDetailPage = {
                                         <span class="text-muted"><i class="fas fa-receipt mr-2 text-brand"></i>Total Amount</span>
                                         <h4 class="font-weight-bold text-brand mb-0">₹{{ order.total.toLocaleString('en-IN') }}</h4>
                                     </li>
+                                    <!-- ✅ ADDED: Transaction ID -->
+                                    <li v-if="order.razorpay_payment_id" class="d-flex justify-content-between py-3 border-bottom-light">
+                                        <span class="text-muted"><i class="fas fa-credit-card mr-2 text-brand"></i>Transaction ID</span>
+                                        <span class="font-weight-medium small text-dark">{{ order.razorpay_payment_id.split('_')[1] || order.razorpay_payment_id }}</span>
+                                    </li>
                                     <li class="d-flex justify-content-between py-3 align-items-center">
                                         <span class="text-muted"><i class="fas fa-info-circle mr-2 text-brand"></i>Status</span>
                                         <span class="status-badge px-3 py-1 rounded-pill" :class="order.status.toLowerCase()">{{ order.status }}</span>

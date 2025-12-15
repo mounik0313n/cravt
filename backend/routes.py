@@ -736,66 +736,6 @@ def manage_customer_profile():
         orders = Order.query.options(joinedload(Order.restaurant)).filter_by(user_id=current_user.id).order_by(Order.created_at.desc()).all()
         return jsonify([{'id': o.id, 'date': o.created_at.strftime('%b %d, %Y'), 'total': o.total_amount, 'status': o.status.capitalize(), 'restaurantName': o.restaurant.name if o.restaurant else 'N/A'} for o in orders]), 200
 
-    # ✅ REPLACE THIS ENTIRE BLOCK
-    if request.method == 'POST':
-        data = request.get_json()
-        restaurant_id = data.get('restaurant_id')
-        restaurant = Restaurant.query.get_or_404(restaurant_id)
-
-        # Server-side price calculation for security
-        subtotal = 0
-        order_items_to_create = []
-        for item_data in data.get('items', []):
-            menu_item = MenuItem.query.get(item_data.get('menu_item_id'))
-            if not menu_item or not menu_item.is_available or menu_item.restaurant_id != restaurant.id:
-                return jsonify({'message': f"Menu item is invalid or unavailable"}), 400
-            
-            quantity = item_data.get('quantity')
-            subtotal += menu_item.price * quantity
-            order_items_to_create.append(OrderItem(menu_item_id=menu_item.id, quantity=quantity, price_at_order=menu_item.price))
-
-        if not order_items_to_create:
-            return jsonify({'message': 'Order must contain at least one item'}), 400
-
-        # Server-side coupon validation
-        final_total = subtotal
-        discount_amount = 0
-        coupon_code = data.get('coupon_code')
-        if coupon_code:
-            coupon = Coupon.query.filter(Coupon.code == coupon_code, Coupon.is_active == True, or_(Coupon.restaurant_id == None, Coupon.restaurant_id == restaurant.id)).first()
-            if coupon:
-                if coupon.discount_type == 'Percentage':
-                    discount_amount = (subtotal * coupon.discount_value) / 100
-                else:
-                    discount_amount = coupon.discount_value
-                final_total = max(0, subtotal - discount_amount)
-
-        # Create the order
-        otp = ''.join(random.choices(string.digits, k=6))
-        qr_payload = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
-        new_order = Order(
-            user_id=current_user.id,
-            restaurant_id=restaurant.id,
-            total_amount=round(final_total, 2),
-            order_type=data.get('order_type'),
-            otp=otp,
-            qr_payload=qr_payload,
-            items=order_items_to_create,
-            coupon_code=coupon_code,
-            discount_amount=round(discount_amount, 2)
-        )
-        db.session.add(new_order)
-        db.session.commit()
-
-        # THIS IS THE FIX: Return the correct key and the real ID
-        return jsonify({'message': 'Order placed successfully', 'order_id': new_order.id}), 201
-
-# --- ✅ REPLACE THIS ENTIRE FUNCTION IN YOUR routes.py ---
-
-
-# In backend/routes.py
-
-# ✅ THIS IS THE CORRECTED AND FINAL VERSION OF THE FUNCTION
 @app.route('/api/orders', methods=['POST'])
 @auth_required('token')
 @roles_required('customer')
@@ -1012,7 +952,12 @@ def verify_razorpay_payment():
     # Mark payment success
     order.razorpay_payment_id = razorpay_payment_id
     order.payment_status = 'paid'
-    order.status = 'completed'
+    
+    # ✅ FIX: Status should be 'placed' so it appears in the Restaurant Dashboard
+    # 'completed' is ONLY for when the order is picked up/delivered.
+    order.status = 'placed' 
+    order.acceptance_status = 'pending'
+    
     db.session.commit()
 
     try:
@@ -1055,7 +1000,11 @@ def razorpay_webhook():
             if order:
                 order.razorpay_payment_id = razorpay_payment_id
                 order.payment_status = 'paid'
-                order.status = 'completed'
+                
+                # ✅ FIX: Webhook also sets status to 'placed' for visibility
+                order.status = 'placed'
+                order.acceptance_status = 'pending'
+                
                 db.session.commit()
 
     except Exception as e:
@@ -1213,7 +1162,7 @@ def get_featured_restaurants():
 
 
 @app.route('/api/restaurants/<int:restaurant_id>', methods=['GET'])
-@cache.cached(timeout=300)
+# Removed cache to ensure fee updates reflect immediately
 def get_restaurant_details(restaurant_id):
     restaurant = Restaurant.query.options(joinedload(Restaurant.categories).joinedload(Category.menu_items)).get_or_404(restaurant_id)
     
@@ -1228,7 +1177,13 @@ def get_restaurant_details(restaurant_id):
         'id': restaurant.id, 'name': restaurant.name, 'description': restaurant.description, 'address': restaurant.address, 'city': restaurant.city, 'cuisine': 'Local Favorites', 
         'rating': round(float(stats.avg_rating or 0), 1),
         'reviews': stats.review_count or 0,
-        'categories': categories_data
+        'categories': categories_data,
+        
+        # --- ✅ FIX: Include Fees ---
+        'delivery_fee': restaurant.delivery_fee,
+        'takeaway_fee': restaurant.takeaway_fee,
+        'dine_in_fee': restaurant.dine_in_fee,
+        'platform_fee': restaurant.platform_fee
     }
     return jsonify(restaurant_data), 200
 
@@ -1257,6 +1212,9 @@ def get_order_history():
             'total': o.total_amount,
             'status': o.status.capitalize(),
             'restaurantName': o.restaurant.name if o.restaurant else 'N/A',
+            # ✅ FIX: Include payment/acceptance info
+            'transaction_id': o.razorpay_payment_id,
+            'acceptance_status': o.acceptance_status or 'pending',
             # ✅ THE FIX: Check if the review object exists for this order
             'has_review': bool(o.review) 
         } for o in orders]
@@ -1436,6 +1394,13 @@ def update_order_status(order_id):
         return jsonify({"message": f"Invalid status '{new_status}'."}), 400
         
     order.status = new_status
+    
+    # ✅ FIX: Update acceptance_status based on the workflow status
+    if new_status == 'preparing':
+        order.acceptance_status = 'accepted'
+    elif new_status == 'rejected':
+        order.acceptance_status = 'rejected'
+        
     db.session.commit()
     try:
         cache.delete_memoized(get_restaurant_details, restaurant.id)
@@ -1490,7 +1455,8 @@ def verify_order(order_id):
         return jsonify({"message": "OTP is required."}), 400
 
     # The core logic: compare OTPs
-    if otp_submitted == order.otp:
+    print(f"DEBUG: Comparing OTPs - Input: '{otp_submitted}' stored: '{order.otp}'")
+    if str(otp_submitted).strip() == str(order.otp).strip():
         order.status = 'completed'
         db.session.commit()
 
@@ -1511,8 +1477,8 @@ def verify_order(order_id):
 def clear_otp_after_delay(app_context, order_id):
     """Waits for a delay and then clears the OTP for a given order."""
     with app_context:
-        print(f"Starting background task to clear OTP for order {order_id} in 60 seconds.")
-        time.sleep(60) # Wait for 1 minute
+        print(f"Starting background task to clear OTP for order {order_id} in 20 minutes.")
+        time.sleep(1200) # Wait for 20 minutes (1200 seconds)
         try:
             order = Order.query.get(order_id)
             if order:
@@ -1521,6 +1487,64 @@ def clear_otp_after_delay(app_context, order_id):
                 print(f"Successfully cleared OTP for order {order_id}.")
         except Exception as e:
             print(f"Error in background task for order {order_id}: {e}")
+
+# --- NEW: ORDER DETAILS ENDPOINT ---
+@app.route('/api/orders/<int:order_id>', methods=['GET'])
+@auth_required('token')
+@roles_required('customer')
+def get_order_details(order_id):
+    """ Fetches details for a single order. """
+    try:
+        order = Order.query.options(
+            joinedload(Order.restaurant),
+            joinedload(Order.items).joinedload(OrderItem.menu_item)
+        ).get_or_404(order_id)
+
+        if order.user_id != current_user.id:
+            return jsonify({"message": "Unauthorized access to this order."}), 403
+
+        # Format items
+        items_data = []
+        for item in order.items:
+            items_data.append({
+                'id': item.id,
+                'name': item.menu_item.name if item.menu_item else 'Unknown Item',
+                'quantity': item.quantity,
+                'price': item.price_at_order,
+                'total': item.price_at_order * item.quantity
+            })
+            
+        # Format the scheduled date/time for display
+        scheduled_date_str = None
+        scheduled_time_str = None
+        if order.is_scheduled and order.scheduled_time:
+             # Convert to IST (UTC+5:30) for display
+            ist_time = order.scheduled_time + timedelta(hours=5, minutes=30)
+            scheduled_date_str = ist_time.strftime('%b %d, %Y')
+            scheduled_time_str = ist_time.strftime('%I:%M %p')
+
+        order_data = {
+            'id': order.id,
+            'date': order.created_at.strftime('%b %d, %Y'),
+            'total': order.total_amount,
+            'status': order.status.capitalize(),
+            'restaurantName': order.restaurant.name if order.restaurant else 'N/A',
+            'order_type': order.order_type,
+            'otp': order.otp,
+            'qr_payload': order.qr_payload,
+            'items': items_data,
+            'is_scheduled': order.is_scheduled,
+            'scheduled_date': scheduled_date_str,
+            'scheduled_time': scheduled_time_str,
+            # ✅ FIX: Include payment/acceptance info for details page
+            'razorpay_payment_id': order.razorpay_payment_id,
+            'acceptance_status': order.acceptance_status or 'pending'
+        }
+
+        return jsonify(order_data), 200
+    except Exception as e:
+        print(f"Error fetching order details: {e}")
+        return jsonify({"message": "An error occurred."}), 500
 # --- NEW: MENU MANAGEMENT ENDPOINTS ---
 
 @app.route('/api/restaurant/menu', methods=['GET'])
@@ -1816,40 +1840,7 @@ def get_restaurant_analytics():
     }), 200
 # In backend/routes.py
 
-@app.route('/api/orders/<int:order_id>', methods=['GET'])
-@auth_required('token')
-@roles_required('customer')
-def get_order_details(order_id):
-    order = Order.query.options(joinedload(Order.items).joinedload(OrderItem.menu_item), joinedload(Order.restaurant)).filter_by(id=order_id, user_id=current_user.id).first_or_404()
-    items_data = [{'id': item.id, 'name': item.menu_item.name, 'quantity': item.quantity, 'price': item.price_at_order} for item in order.items]
-    ist_time = order.created_at + timedelta(hours=5, minutes=30)
 
-    order_data = {
-        'id': order.id,
-        'date': ist_time.strftime('%b %d, %Y'),
-        'total': order.total_amount,
-        'status': order.status.capitalize(),
-        'restaurantName': order.restaurant.name,
-        'otp': order.otp,
-        'qr_payload': order.qr_payload,
-        'order_type': order.order_type,
-        'items': items_data,
-        
-        # --- ✅ START: ADDED SCHEDULING INFO ---
-        'is_scheduled': order.is_scheduled,
-        'scheduled_date': None,
-        'scheduled_time': None
-        # --- ✅ END: ADDED SCHEDULING INFO ---
-    }
-
-    # --- ✅ START: FORMAT AND ADD TIME IF IT EXISTS ---
-    if order.is_scheduled and order.scheduled_time:
-        ist_scheduled_time = order.scheduled_time + timedelta(hours=5, minutes=30)
-        order_data['scheduled_date'] = ist_scheduled_time.strftime('%b %d, %Y')
-        order_data['scheduled_time'] = ist_scheduled_time.strftime('%I:%M %p')
-    # --- ✅ END: FORMAT AND ADD TIME ---
-
-    return jsonify(order_data), 200
 
 
 

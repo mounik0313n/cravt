@@ -206,11 +206,14 @@ const CustomerCheckoutPage = {
             discountAmount: 0,
             availableCoupons: [],
             couponsLoading: true,
-            deliveryAddress: (store.getters.currentUser && store.getters.currentUser.address) ? store.getters.currentUser.address : ''
+            deliveryAddress: (store.getters.currentUser && store.getters.currentUser.address) ? store.getters.currentUser.address : '',
+            currentOrderId: null // Track order ID for retries
         };
     },
     computed: {
-        ...Vuex.mapGetters(['cartItems', 'cartTotal', 'cartRestaurantId']),
+        cartItems() { return store.getters.cartItems; },
+        cartTotal() { return store.getters.cartTotal; },
+        cartRestaurantId() { return store.getters.cartRestaurantId; },
         subtotal() {
             return this.cartTotal;
         },
@@ -277,6 +280,7 @@ const CustomerCheckoutPage = {
             if (!this.cartRestaurantId) return;
             try {
                 const data = await apiService.get(`/api/restaurants/${this.cartRestaurantId}`);
+                console.log("DEBUG: Fetched Restaurant Details:", data); // ✅ DEBUG LOG
                 this.restaurantInfo = data;
                 // Update local defaults if needed, but computed properties handle it
             } catch (e) {
@@ -391,6 +395,8 @@ const CustomerCheckoutPage = {
 
                                 this.$store.dispatch('clearCart');
                                 alert('Payment successful!');
+                                // Clear the current order tracking so next time we start fresh
+                                this.currentOrderId = null;
                                 this.$router.push({ name: 'OrderDetail', params: { id: orderId } });
                             } catch (verErr) {
                                 console.error('Verification failed', verErr);
@@ -401,41 +407,17 @@ const CustomerCheckoutPage = {
                         prefill: {
                             name: (store.getters.currentUser) ? (store.getters.currentUser.name || '') : '',
                             email: (store.getters.currentUser) ? (store.getters.currentUser.email || '') : '',
-                            contact: (store.getters.currentUser) ? (store.getters.currentUser.phone || '') : '' // Important for UPI
+                            contact: (store.getters.currentUser) ? (store.getters.currentUser.phone || '') : ''
                         },
                         theme: { color: '#F8941C' },
-                        config: {
-                            display: {
-                                blocks: {
-                                    upi: {
-                                        name: 'Pay via UPI',
-                                        instruments: [
-                                            { method: 'upi' }
-                                        ]
-                                    },
-                                    qr: {
-                                        name: 'Scan QR Code',
-                                        instruments: [
-                                            { method: 'upi', flows: ['qr'] }
-                                        ]
-                                    },
-                                    other: {
-                                        name: 'Other Payment Methods',
-                                        instruments: [
-                                            { method: 'card' },
-                                            { method: 'netbanking' }
-                                        ]
-                                    }
-                                },
-                                sequence: ['block.upi', 'block.qr', 'block.other'],
-                                preferences: {
-                                    show_default_blocks: true
-                                }
+                        modal: {
+                            ondismiss: () => {
+                                this.isPaying = false;
+                                console.log('Payment cancelled by user.');
+                                alert('Payment cancelled. You can retry payment for this order.');
                             }
                         }
                     };
-
-                    console.log(`Initializing Razorpay with Amount: ${options.amount} (derived from Order ID: ${orderId})`);
 
                     const rzp = new window.Razorpay(options);
                     rzp.on('payment.failed', (resp) => {
@@ -457,6 +439,7 @@ const CustomerCheckoutPage = {
                     });
                     this.$store.dispatch('clearCart');
                     alert('Payment successful (Dev Mode)!');
+                    this.currentOrderId = null;
                     this.$router.push({ name: 'OrderDetail', params: { id: orderId } });
                 }
 
@@ -482,6 +465,14 @@ const CustomerCheckoutPage = {
                 return;
             }
 
+            // ✅ FIX: Check if we already have an order ID for this session (retry scenario)
+            if (this.currentOrderId) {
+                console.log("Retrying payment for existing order:", this.currentOrderId);
+                await this.payWithRazorpay(this.currentOrderId);
+                this.isPlacing = false;
+                return;
+            }
+
             let payload = {
                 restaurant_id: this.cartRestaurantId,
                 order_type: this.orderType,
@@ -494,6 +485,8 @@ const CustomerCheckoutPage = {
             try {
                 const data = await apiService.post('/api/orders', payload);
                 const orderId = data.order_id;
+                // ✅ FIX: Store the order ID so we don't create it again if payment fails
+                this.currentOrderId = orderId;
                 await this.payWithRazorpay(orderId);
             } catch (err) {
                 this.error = err.message || "Failed to place order.";
