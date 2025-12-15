@@ -33,7 +33,6 @@ Flask-SQLAlchemy==3.1.1
 Flask-WTF==1.2.1
 greenlet==3.1.1
 gunicorn==22.0.0
-gevent==24.2.1
 idna==3.10
 importlib_resources==6.4.5
 itsdangerous==2.2.0

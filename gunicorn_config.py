@@ -1,14 +1,13 @@
 bind = "0.0.0.0:10000"
 
 # Workers: For 100 concurrent users
-# Formula: (2 * CPU cores) + 1
-# Render Standard: 0.5 CPU = 2 workers
-# Render Pro: 2 CPU = 5 workers recommended
-workers = 8  # Increase for 100 concurrent users
+# Using sync workers (compatible with Python 3.13)
+workers = 4  # 4 workers for Render Pro (2 CPU cores)
 
-# Use gevent for async I/O (better for I/O-bound operations like database queries)
-worker_class = "gevent"
+# Use sync worker class (stable and compatible)
+worker_class = "sync"
 worker_connections = 1000
+threads = 4  # 4 threads per worker = 16 total threads
 
 # Timeouts
 timeout = 120
