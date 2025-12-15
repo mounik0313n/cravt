@@ -6,6 +6,7 @@ from flask import Flask, send_from_directory
 from whitenoise import WhiteNoise
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
+from flask_compress import Compress
 
 # your extension imports
 from backend.extensions import db, security, api, migrate, cache
@@ -45,6 +46,9 @@ def createApp():
     security.init_app(app, user_datastore)
     # Initialize caching (Redis or SimpleCache depending on config)
     cache.init_app(app)
+    
+    # Performance: Enable gzip compression
+    Compress(app)
 
     # Initialize Firebase Admin (centralized)
     try:

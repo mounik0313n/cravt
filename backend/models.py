@@ -71,6 +71,13 @@ class Restaurant(db.Model):
     orders = db.relationship('Order', backref='restaurant', lazy=True)
     reviews = db.relationship('Review', backref='restaurant', lazy=True, cascade="all, delete-orphan")
     time_slots = db.relationship('TimeSlot', backref='restaurant', lazy=True, cascade="all, delete-orphan")
+    
+    # Performance: Add indexes on frequently queried columns
+    __table_args__ = (
+        db.Index('idx_restaurant_city', 'city'),
+        db.Index('idx_restaurant_is_active', 'is_active'),
+        db.Index('idx_restaurant_owner_id', 'owner_id'),
+    )
 
 
 # ... (The rest of your models.py file remains unchanged) ...
@@ -123,6 +130,14 @@ class Order(db.Model):
     
     review = db.relationship('Review', backref='order', uselist=False, cascade="all, delete-orphan")
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade="all, delete-orphan")
+    
+    # Performance: Add indexes on frequently queried columns
+    __table_args__ = (
+        db.Index('idx_order_user_id', 'user_id'),
+        db.Index('idx_order_restaurant_id', 'restaurant_id'),
+        db.Index('idx_order_status', 'status'),
+        db.Index('idx_order_created_at', 'created_at'),
+    )
 
 class OrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -1185,7 +1185,13 @@ def get_restaurant_details(restaurant_id):
         'dine_in_fee': restaurant.dine_in_fee,
         'platform_fee': restaurant.platform_fee
     }
-    return jsonify(restaurant_data), 200
+    
+    # ✅ FIX: Add cache-control headers to prevent caching in production
+    response = jsonify(restaurant_data)
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response, 200
 
 # In backend/routes.py
 
